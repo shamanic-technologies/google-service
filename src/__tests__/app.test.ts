@@ -213,6 +213,10 @@ describe("GET /accounts/:accountId/campaigns", () => {
     expect(res.status).toBe(200);
     expect(res.body.campaigns).toHaveLength(1);
     expect(res.body.campaigns[0].name).toBe("Test Campaign");
+    expect(mockGetRefreshToken).toHaveBeenCalledWith("test-app", "111", {
+      method: "GET",
+      path: "/accounts/:accountId/campaigns",
+    });
   });
 
   it("filters by status", async () => {
@@ -348,6 +352,34 @@ describe("POST /accounts/:accountId/campaigns", () => {
     expect(res.status).toBe(400);
   });
 
+  it("passes correct caller context to getRefreshToken", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ refresh_token_provider: "google-ads-refresh-111" }],
+    });
+    mockGetRefreshToken.mockResolvedValueOnce("fake-refresh-token");
+    mockGetCustomer.mockReturnValueOnce({});
+    mockCreateCampaign.mockResolvedValueOnce({
+      id: "789",
+      name: "New Campaign",
+      status: "PAUSED",
+      advertisingChannelType: "SEARCH",
+      budgetAmountMicros: "5000000",
+    });
+
+    await request(app)
+      .post("/accounts/111/campaigns")
+      .send({
+        appId: "test-app",
+        name: "New Campaign",
+        advertisingChannelType: "SEARCH",
+        budgetAmountMicros: "5000000",
+      });
+    expect(mockGetRefreshToken).toHaveBeenCalledWith("test-app", "111", {
+      method: "POST",
+      path: "/accounts/:accountId/campaigns",
+    });
+  });
+
   it("creates a campaign", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ refresh_token_provider: "google-ads-refresh-111" }],
@@ -405,6 +437,10 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
     expect(res.status).toBe(200);
     expect(res.body.campaign.status).toBe("PAUSED");
     expect(res.body.message).toBe("Campaign updated successfully");
+    expect(mockGetRefreshToken).toHaveBeenCalledWith("test-app", "111", {
+      method: "PATCH",
+      path: "/accounts/:accountId/campaigns/:campaignId",
+    });
   });
 });
 

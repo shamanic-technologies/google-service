@@ -1,5 +1,10 @@
 import { env } from "../env";
 
+export interface CallerContext {
+  method: string;
+  path: string;
+}
+
 const headers = () => ({
   "Content-Type": "application/json",
   "x-api-key": env.KEY_SERVICE_API_KEY,
@@ -23,12 +28,20 @@ export const storeRefreshToken = async (
 
 export const getRefreshToken = async (
   appId: string,
-  accountId: string
+  accountId: string,
+  caller: CallerContext
 ): Promise<string> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(
     `${env.KEY_SERVICE_URL}/internal/app-keys/${provider}/decrypt?appId=${encodeURIComponent(appId)}`,
-    { headers: headers() }
+    {
+      headers: {
+        ...headers(),
+        "X-Caller-Service": "google",
+        "X-Caller-Method": caller.method,
+        "X-Caller-Path": caller.path,
+      },
+    }
   );
   if (!res.ok) {
     throw new Error(`Failed to get refresh token: ${res.status}`);
