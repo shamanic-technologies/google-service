@@ -13,7 +13,7 @@ router.get(
       const { appId } = req.validatedQuery as { appId: string };
 
       const result = await query(
-        `SELECT id, app_id, account_id, mcc_id, created_at
+        `SELECT id, app_id, org_id, user_id, account_id, mcc_id, created_at
          FROM accounts
          WHERE app_id = $1
          ORDER BY created_at DESC`,
@@ -24,6 +24,8 @@ router.get(
         accounts: result.rows.map((row) => ({
           id: row.id,
           appId: row.app_id,
+          orgId: row.org_id,
+          userId: row.user_id,
           accountId: row.account_id,
           mccId: row.mcc_id,
           createdAt: row.created_at.toISOString(),

@@ -39,6 +39,8 @@ export const AccountsQuerySchema = z.object({
 export const AccountSchema = z.object({
   id: z.string().uuid(),
   appId: z.string(),
+  orgId: z.string(),
+  userId: z.string(),
   accountId: z.string(),
   mccId: z.string(),
   createdAt: z.string(),

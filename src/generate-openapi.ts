@@ -45,7 +45,22 @@ const spec = {
       DuplicateCampaignResponse: toSchema(schemas.DuplicateCampaignResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
     },
-    parameters: {},
+    parameters: {
+      OrgId: {
+        name: "x-org-id",
+        in: "header",
+        required: true,
+        schema: { type: "string" },
+        description: "Internal org UUID from client-service",
+      },
+      UserId: {
+        name: "x-user-id",
+        in: "header",
+        required: true,
+        schema: { type: "string" },
+        description: "Internal user UUID from client-service",
+      },
+    },
   },
   paths: {
     "/health": {
@@ -67,6 +82,8 @@ const spec = {
       get: {
         summary: "Generate Google OAuth2 URL for Google Ads scope",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "appId", in: "query", required: true, schema: { type: "string" } },
           { name: "redirectUri", in: "query", required: false, schema: { type: "string" } },
         ],
@@ -94,6 +111,8 @@ const spec = {
       get: {
         summary: "OAuth2 callback — exchanges code for refresh token and links accounts",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "code", in: "query", required: true, schema: { type: "string" } },
           { name: "state", in: "query", required: true, schema: { type: "string" } },
         ],
@@ -121,6 +140,8 @@ const spec = {
       get: {
         summary: "List linked Google Ads accounts for an app",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "appId", in: "query", required: true, schema: { type: "string" } },
         ],
         responses: {
@@ -139,6 +160,8 @@ const spec = {
       get: {
         summary: "List campaigns for a Google Ads account",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "appId", in: "query", required: true, schema: { type: "string" } },
           {
@@ -162,6 +185,8 @@ const spec = {
       post: {
         summary: "Create a new campaign",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         requestBody: {
@@ -187,6 +212,8 @@ const spec = {
       get: {
         summary: "Get campaign details",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
           { name: "appId", in: "query", required: true, schema: { type: "string" } },
@@ -213,6 +240,8 @@ const spec = {
       patch: {
         summary: "Update campaign (budget, bids, status)",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -240,6 +269,8 @@ const spec = {
         summary:
           "Get campaign performance metrics (impressions, clicks, conversions, CPA, ROAS)",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
           { name: "appId", in: "query", required: true, schema: { type: "string" } },
@@ -272,6 +303,8 @@ const spec = {
       post: {
         summary: "Duplicate a campaign for A/B testing",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -298,6 +331,8 @@ const spec = {
       get: {
         summary: "List conversion actions for an account",
         parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "appId", in: "query", required: true, schema: { type: "string" } },
         ],
