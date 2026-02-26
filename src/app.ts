@@ -4,6 +4,7 @@ import authRoutes from "./routes/auth";
 import accountsRoutes from "./routes/accounts";
 import campaignsRoutes from "./routes/campaigns";
 import { errorHandler } from "./middleware/error-handler";
+import { requireIdentityHeaders } from "./middleware/validate";
 
 export const createApp = () => {
   const app = express();
@@ -11,11 +12,8 @@ export const createApp = () => {
   app.use(express.json());
 
   app.use(healthRoutes);
-  app.use(authRoutes);
-  app.use(accountsRoutes);
-  app.use(campaignsRoutes);
 
-  // Serve OpenAPI spec
+  // Serve OpenAPI spec (no auth required)
   app.get("/openapi.json", (_req, res) => {
     try {
       const fs = require("fs");
@@ -27,6 +25,12 @@ export const createApp = () => {
       res.status(404).json({ error: "OpenAPI spec not generated yet. Run npm run generate-openapi" });
     }
   });
+
+  // All routes below require x-org-id and x-user-id headers
+  app.use(requireIdentityHeaders);
+  app.use(authRoutes);
+  app.use(accountsRoutes);
+  app.use(campaignsRoutes);
 
   app.use(errorHandler);
 

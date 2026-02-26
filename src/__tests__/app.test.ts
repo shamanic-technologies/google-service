@@ -75,6 +75,11 @@ import { createApp } from "../app";
 
 const app = createApp();
 
+const TEST_ORG_ID = "org-uuid-123";
+const TEST_USER_ID = "user-uuid-456";
+
+const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID };
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -82,7 +87,7 @@ beforeEach(() => {
 // ─── Health ───
 
 describe("GET /health", () => {
-  it("returns ok", async () => {
+  it("returns ok without identity headers", async () => {
     const res = await request(app).get("/health");
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("ok");
@@ -91,18 +96,38 @@ describe("GET /health", () => {
   });
 });
 
+// ─── Identity Headers ───
+
+describe("Identity headers middleware", () => {
+  it("returns 400 without x-org-id", async () => {
+    const res = await request(app)
+      .get("/auth/url?appId=test-app")
+      .set("x-user-id", TEST_USER_ID);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("x-org-id");
+  });
+
+  it("returns 400 without x-user-id", async () => {
+    const res = await request(app)
+      .get("/auth/url?appId=test-app")
+      .set("x-org-id", TEST_ORG_ID);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("x-user-id");
+  });
+});
+
 // ─── Auth URL ───
 
 describe("GET /auth/url", () => {
   it("returns 400 without appId", async () => {
-    const res = await request(app).get("/auth/url");
+    const res = await request(app).get("/auth/url").set(idHeaders);
     expect(res.status).toBe(400);
   });
 
   it("generates OAuth URL with valid appId", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    const res = await request(app).get("/auth/url?appId=test-app");
+    const res = await request(app).get("/auth/url?appId=test-app").set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.url).toContain("accounts.google.com");
     expect(res.body.url).toContain("test-client-id");
@@ -110,7 +135,7 @@ describe("GET /auth/url", () => {
 
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO oauth_states"),
-      expect.arrayContaining(["test-app"])
+      expect.arrayContaining(["test-app", TEST_ORG_ID, TEST_USER_ID])
     );
   });
 });
@@ -119,14 +144,16 @@ describe("GET /auth/url", () => {
 
 describe("GET /auth/callback", () => {
   it("returns 400 without code or state", async () => {
-    const res = await request(app).get("/auth/callback");
+    const res = await request(app).get("/auth/callback").set(idHeaders);
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for invalid/expired state", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    const res = await request(app).get("/auth/callback?code=abc&state=invalid");
+    const res = await request(app)
+      .get("/auth/callback?code=abc&state=invalid")
+      .set(idHeaders);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("Invalid or expired");
   });
@@ -134,7 +161,12 @@ describe("GET /auth/callback", () => {
   it("successfully links accounts on valid callback", async () => {
     mockQuery
       .mockResolvedValueOnce({
-        rows: [{ app_id: "test-app", redirect_uri: "http://localhost:8080/auth/callback" }],
+        rows: [{
+          app_id: "test-app",
+          org_id: TEST_ORG_ID,
+          user_id: TEST_USER_ID,
+          redirect_uri: "http://localhost:8080/auth/callback",
+        }],
       })
       .mockResolvedValueOnce({ rows: [] }) // DELETE oauth_states
       .mockResolvedValueOnce({ rows: [] }); // INSERT accounts
@@ -150,11 +182,17 @@ describe("GET /auth/callback", () => {
 
     mockStoreRefreshToken.mockResolvedValueOnce(undefined);
 
-    const res = await request(app).get("/auth/callback?code=validcode&state=validstate");
+    const res = await request(app)
+      .get("/auth/callback?code=validcode&state=validstate")
+      .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.accountId).toBe("111");
     expect(mockStoreRefreshToken).toHaveBeenCalledWith("test-app", "111", "rt");
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO accounts"),
+      expect.arrayContaining([TEST_ORG_ID, TEST_USER_ID])
+    );
   });
 });
 
@@ -162,7 +200,7 @@ describe("GET /auth/callback", () => {
 
 describe("GET /accounts", () => {
   it("returns 400 without appId", async () => {
-    const res = await request(app).get("/accounts");
+    const res = await request(app).get("/accounts").set(idHeaders);
     expect(res.status).toBe(400);
   });
 
@@ -172,6 +210,8 @@ describe("GET /accounts", () => {
         {
           id: "uuid-1",
           app_id: "test-app",
+          org_id: TEST_ORG_ID,
+          user_id: TEST_USER_ID,
           account_id: "111",
           mcc_id: "1234567890",
           created_at: new Date("2024-01-01"),
@@ -179,10 +219,12 @@ describe("GET /accounts", () => {
       ],
     });
 
-    const res = await request(app).get("/accounts?appId=test-app");
+    const res = await request(app).get("/accounts?appId=test-app").set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.accounts).toHaveLength(1);
     expect(res.body.accounts[0].accountId).toBe("111");
+    expect(res.body.accounts[0].orgId).toBe(TEST_ORG_ID);
+    expect(res.body.accounts[0].userId).toBe(TEST_USER_ID);
   });
 });
 
@@ -190,7 +232,7 @@ describe("GET /accounts", () => {
 
 describe("GET /accounts/:accountId/campaigns", () => {
   it("returns 400 without appId", async () => {
-    const res = await request(app).get("/accounts/111/campaigns");
+    const res = await request(app).get("/accounts/111/campaigns").set(idHeaders);
     expect(res.status).toBe(400);
   });
 
@@ -209,7 +251,9 @@ describe("GET /accounts/:accountId/campaigns", () => {
       },
     ]);
 
-    const res = await request(app).get("/accounts/111/campaigns?appId=test-app");
+    const res = await request(app)
+      .get("/accounts/111/campaigns?appId=test-app")
+      .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.campaigns).toHaveLength(1);
     expect(res.body.campaigns[0].name).toBe("Test Campaign");
@@ -227,9 +271,9 @@ describe("GET /accounts/:accountId/campaigns", () => {
     mockGetCustomer.mockReturnValueOnce({});
     mockListCampaigns.mockResolvedValueOnce([]);
 
-    const res = await request(app).get(
-      "/accounts/111/campaigns?appId=test-app&status=PAUSED"
-    );
+    const res = await request(app)
+      .get("/accounts/111/campaigns?appId=test-app&status=PAUSED")
+      .set(idHeaders);
     expect(res.status).toBe(200);
     expect(mockListCampaigns).toHaveBeenCalledWith({}, "PAUSED");
   });
@@ -252,9 +296,9 @@ describe("GET /accounts/:accountId/campaigns/:campaignId", () => {
       resourceName: "customers/111/campaigns/123",
     });
 
-    const res = await request(app).get(
-      "/accounts/111/campaigns/123?appId=test-app"
-    );
+    const res = await request(app)
+      .get("/accounts/111/campaigns/123?appId=test-app")
+      .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.id).toBe("123");
     expect(res.body.resourceName).toBe("customers/111/campaigns/123");
@@ -268,9 +312,9 @@ describe("GET /accounts/:accountId/campaigns/:campaignId", () => {
     mockGetCustomer.mockReturnValueOnce({});
     mockGetCampaignDetail.mockResolvedValueOnce(null);
 
-    const res = await request(app).get(
-      "/accounts/111/campaigns/999?appId=test-app"
-    );
+    const res = await request(app)
+      .get("/accounts/111/campaigns/999?appId=test-app")
+      .set(idHeaders);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Campaign not found");
   });
@@ -280,9 +324,9 @@ describe("GET /accounts/:accountId/campaigns/:campaignId", () => {
 
 describe("GET /accounts/:accountId/campaigns/:campaignId/performance", () => {
   it("returns 400 without date params", async () => {
-    const res = await request(app).get(
-      "/accounts/111/campaigns/123/performance?appId=test-app"
-    );
+    const res = await request(app)
+      .get("/accounts/111/campaigns/123/performance?appId=test-app")
+      .set(idHeaders);
     expect(res.status).toBe(400);
   });
 
@@ -303,9 +347,9 @@ describe("GET /accounts/:accountId/campaigns/:campaignId/performance", () => {
       averageCpc: 10,
     });
 
-    const res = await request(app).get(
-      "/accounts/111/campaigns/123/performance?appId=test-app&startDate=2024-01-01&endDate=2024-01-31"
-    );
+    const res = await request(app)
+      .get("/accounts/111/campaigns/123/performance?appId=test-app&startDate=2024-01-01&endDate=2024-01-31")
+      .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.campaignId).toBe("123");
     expect(res.body.metrics.impressions).toBe(10000);
@@ -333,9 +377,9 @@ describe("GET /accounts/:accountId/conversions", () => {
       },
     ]);
 
-    const res = await request(app).get(
-      "/accounts/111/conversions?appId=test-app"
-    );
+    const res = await request(app)
+      .get("/accounts/111/conversions?appId=test-app")
+      .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.conversionActions).toHaveLength(1);
     expect(res.body.conversionActions[0].name).toBe("Purchase");
@@ -348,6 +392,7 @@ describe("POST /accounts/:accountId/campaigns", () => {
   it("returns 400 with invalid body", async () => {
     const res = await request(app)
       .post("/accounts/111/campaigns")
+      .set(idHeaders)
       .send({ name: "" });
     expect(res.status).toBe(400);
   });
@@ -368,6 +413,7 @@ describe("POST /accounts/:accountId/campaigns", () => {
 
     await request(app)
       .post("/accounts/111/campaigns")
+      .set(idHeaders)
       .send({
         appId: "test-app",
         name: "New Campaign",
@@ -396,6 +442,7 @@ describe("POST /accounts/:accountId/campaigns", () => {
 
     const res = await request(app)
       .post("/accounts/111/campaigns")
+      .set(idHeaders)
       .send({
         appId: "test-app",
         name: "New Campaign",
@@ -414,6 +461,7 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
   it("returns 400 without appId in body", async () => {
     const res = await request(app)
       .patch("/accounts/111/campaigns/123")
+      .set(idHeaders)
       .send({ status: "PAUSED" });
     expect(res.status).toBe(400);
   });
@@ -433,6 +481,7 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
 
     const res = await request(app)
       .patch("/accounts/111/campaigns/123")
+      .set(idHeaders)
       .send({ appId: "test-app", status: "PAUSED" });
     expect(res.status).toBe(200);
     expect(res.body.campaign.status).toBe("PAUSED");
@@ -450,6 +499,7 @@ describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
   it("returns 400 without appId", async () => {
     const res = await request(app)
       .post("/accounts/111/campaigns/123/duplicate")
+      .set(idHeaders)
       .send({});
     expect(res.status).toBe(400);
   });
@@ -469,6 +519,7 @@ describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
 
     const res = await request(app)
       .post("/accounts/111/campaigns/123/duplicate")
+      .set(idHeaders)
       .send({ appId: "test-app" });
     expect(res.status).toBe(201);
     expect(res.body.campaign.id).toBe("999");
@@ -490,6 +541,7 @@ describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
 
     const res = await request(app)
       .post("/accounts/111/campaigns/123/duplicate")
+      .set(idHeaders)
       .send({ appId: "test-app", newName: "AB Test Variant B" });
     expect(res.status).toBe(201);
     expect(res.body.campaign.name).toBe("AB Test Variant B");
@@ -502,7 +554,9 @@ describe("Account not found error handling", () => {
   it("returns 404 when account is not in DB", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    const res = await request(app).get("/accounts/999/campaigns?appId=test-app");
+    const res = await request(app)
+      .get("/accounts/999/campaigns?appId=test-app")
+      .set(idHeaders);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Account not found");
   });
