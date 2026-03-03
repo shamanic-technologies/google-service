@@ -13,12 +13,16 @@ const headers = () => ({
 export const storeRefreshToken = async (
   orgId: string,
   accountId: string,
-  refreshToken: string
+  refreshToken: string,
+  runId?: string
 ): Promise<void> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(`${env.KEY_SERVICE_URL}/internal/keys`, {
     method: "POST",
-    headers: headers(),
+    headers: {
+      ...headers(),
+      ...(runId ? { "x-run-id": runId } : {}),
+    },
     body: JSON.stringify({ orgId, provider, apiKey: refreshToken }),
   });
   if (!res.ok) {
@@ -30,7 +34,8 @@ export const getRefreshToken = async (
   orgId: string,
   userId: string,
   accountId: string,
-  caller: CallerContext
+  caller: CallerContext,
+  runId?: string
 ): Promise<string> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(
@@ -41,6 +46,7 @@ export const getRefreshToken = async (
         "X-Caller-Service": "google",
         "X-Caller-Method": caller.method,
         "X-Caller-Path": caller.path,
+        ...(runId ? { "x-run-id": runId } : {}),
       },
     }
   );

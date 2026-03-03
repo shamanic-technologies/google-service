@@ -87,7 +87,7 @@ router.get(
       }
 
       for (const account of accounts) {
-        await storeRefreshToken(orgId, account.id, tokens.refresh_token);
+        await storeRefreshToken(orgId, account.id, tokens.refresh_token, req.runId);
 
         await query(
           `INSERT INTO accounts (org_id, user_id, account_id, refresh_token_provider, mcc_id)

@@ -4,6 +4,7 @@ import { z, ZodSchema } from "zod";
 export const requireIdentityHeaders = (req: Request, res: Response, next: NextFunction): void => {
   const orgId = req.headers["x-org-id"];
   const userId = req.headers["x-user-id"];
+  const runId = req.headers["x-run-id"];
 
   if (!orgId || typeof orgId !== "string") {
     res.status(400).json({ error: "Missing required header: x-org-id" });
@@ -11,6 +12,10 @@ export const requireIdentityHeaders = (req: Request, res: Response, next: NextFu
   }
   if (!userId || typeof userId !== "string") {
     res.status(400).json({ error: "Missing required header: x-user-id" });
+    return;
+  }
+  if (!runId || typeof runId !== "string") {
+    res.status(400).json({ error: "Missing required header: x-run-id" });
     return;
   }
 
@@ -63,6 +68,7 @@ declare global {
       validatedParams?: unknown;
       orgId?: string;
       userId?: string;
+      runId?: string;
     }
   }
 }
