@@ -759,6 +759,15 @@
           "type": "string"
         },
         "description": "Internal user UUID from client-service"
+      },
+      "RunId": {
+        "name": "x-run-id",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Caller's run ID from runs-service (used as parentRunId when creating a child run)"
       }
     }
   },
@@ -789,6 +798,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           },
           {
             "name": "redirectUri",
@@ -832,6 +844,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           },
           {
             "name": "code",
@@ -883,6 +898,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           }
         ],
         "responses": {
@@ -908,6 +926,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           },
           {
             "name": "accountId",
@@ -954,6 +975,9 @@
             "$ref": "#/components/parameters/UserId"
           },
           {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -994,6 +1018,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           },
           {
             "name": "accountId",
@@ -1045,6 +1072,9 @@
             "$ref": "#/components/parameters/UserId"
           },
           {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -1093,6 +1123,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           },
           {
             "name": "accountId",
@@ -1154,6 +1187,9 @@
             "$ref": "#/components/parameters/UserId"
           },
           {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -1202,6 +1238,9 @@
           },
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
           },
           {
             "name": "accountId",

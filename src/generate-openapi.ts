@@ -60,6 +60,13 @@ const spec = {
         schema: { type: "string" },
         description: "Internal user UUID from client-service",
       },
+      RunId: {
+        name: "x-run-id",
+        in: "header",
+        required: true,
+        schema: { type: "string" },
+        description: "Caller's run ID from runs-service (used as parentRunId when creating a child run)",
+      },
     },
   },
   paths: {
@@ -84,6 +91,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "redirectUri", in: "query", required: false, schema: { type: "string" } },
         ],
         responses: {
@@ -112,6 +120,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "code", in: "query", required: true, schema: { type: "string" } },
           { name: "state", in: "query", required: true, schema: { type: "string" } },
         ],
@@ -141,6 +150,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
         ],
         responses: {
           "200": {
@@ -160,6 +170,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           {
             name: "status",
@@ -184,6 +195,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         requestBody: {
@@ -211,6 +223,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -238,6 +251,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -267,6 +281,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
           {
@@ -300,6 +315,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -328,6 +344,7 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: {

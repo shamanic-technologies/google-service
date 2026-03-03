@@ -5,6 +5,7 @@ import accountsRoutes from "./routes/accounts";
 import campaignsRoutes from "./routes/campaigns";
 import { errorHandler } from "./middleware/error-handler";
 import { requireIdentityHeaders } from "./middleware/validate";
+import { createRequestRun } from "./middleware/create-request-run";
 
 export const createApp = () => {
   const app = express();
@@ -26,8 +27,9 @@ export const createApp = () => {
     }
   });
 
-  // All routes below require x-org-id and x-user-id headers
+  // All routes below require x-org-id, x-user-id, and x-run-id headers
   app.use(requireIdentityHeaders);
+  app.use(createRequestRun);
   app.use(authRoutes);
   app.use(accountsRoutes);
   app.use(campaignsRoutes);

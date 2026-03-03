@@ -29,7 +29,7 @@ import {
 
 const router = Router();
 
-const resolveCustomer = async (orgId: string, userId: string, accountId: string, caller: CallerContext) => {
+const resolveCustomer = async (orgId: string, userId: string, accountId: string, caller: CallerContext, runId?: string) => {
   const accountResult = await query(
     `SELECT refresh_token_provider FROM accounts WHERE org_id = $1 AND account_id = $2`,
     [orgId, accountId]
@@ -38,7 +38,7 @@ const resolveCustomer = async (orgId: string, userId: string, accountId: string,
     throw new Error("Account not found");
   }
 
-  const refreshToken = await getRefreshToken(orgId, userId, accountId, caller);
+  const refreshToken = await getRefreshToken(orgId, userId, accountId, caller, runId);
   const client = createGoogleAdsClient();
   return getCustomer(client, refreshToken, accountId);
 };
@@ -53,7 +53,7 @@ router.get(
       const { accountId } = req.validatedParams as { accountId: string };
       const { status } = req.validatedQuery as { status?: string };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const campaigns = await listCampaigns(customer, status);
 
       res.json({ campaigns });
@@ -76,7 +76,7 @@ router.get(
         campaignId: string;
       };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const campaign = await getCampaignDetail(customer, campaignId);
 
       if (!campaign) {
@@ -109,7 +109,7 @@ router.get(
         endDate: string;
       };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const metrics = await getCampaignPerformance(customer, campaignId, startDate, endDate);
 
       res.json({
@@ -134,7 +134,7 @@ router.get(
     try {
       const { accountId } = req.validatedParams as { accountId: string };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const conversionActions = await listConversionActions(customer);
 
       res.json({ conversionActions });
@@ -164,7 +164,7 @@ router.post(
         endDate?: string;
       };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const campaign = await createCampaign(customer, body);
 
       res.status(201).json({
@@ -197,7 +197,7 @@ router.patch(
         name?: string;
       };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const campaign = await updateCampaign(customer, campaignId, body);
 
       res.json({
@@ -225,7 +225,7 @@ router.post(
       };
       const body = req.validatedBody as { newName?: string };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId);
       const campaign = await duplicateCampaign(customer, campaignId, body.newName);
 
       res.status(201).json({

@@ -6,6 +6,7 @@ const {
   mockQuery,
   mockStoreRefreshToken,
   mockGetRefreshToken,
+  mockCreateRun,
   mockExchangeCodeForTokens,
   mockListAccessibleAccounts,
   mockListCampaigns,
@@ -20,6 +21,7 @@ const {
   mockQuery: vi.fn(),
   mockStoreRefreshToken: vi.fn(),
   mockGetRefreshToken: vi.fn(),
+  mockCreateRun: vi.fn(),
   mockExchangeCodeForTokens: vi.fn(),
   mockListAccessibleAccounts: vi.fn(),
   mockListCampaigns: vi.fn(),
@@ -44,6 +46,8 @@ vi.mock("../env", () => ({
     KEY_SERVICE_API_KEY: "test-key-service-key",
     API_REGISTRY_URL: "http://localhost:3000",
     API_REGISTRY_API_KEY: "test-registry-key",
+    RUNS_SERVICE_URL: "http://localhost:3002",
+    RUNS_SERVICE_API_KEY: "test-runs-service-key",
   },
 }));
 
@@ -55,6 +59,10 @@ vi.mock("../db/client", () => ({
 vi.mock("../services/key-service", () => ({
   storeRefreshToken: (...args: unknown[]) => mockStoreRefreshToken(...args),
   getRefreshToken: (...args: unknown[]) => mockGetRefreshToken(...args),
+}));
+
+vi.mock("../services/runs-service", () => ({
+  createRun: (...args: unknown[]) => mockCreateRun(...args),
 }));
 
 vi.mock("../services/google-ads", () => ({
@@ -77,11 +85,14 @@ const app = createApp();
 
 const TEST_ORG_ID = "org-uuid-123";
 const TEST_USER_ID = "user-uuid-456";
+const TEST_PARENT_RUN_ID = "parent-run-uuid-789";
+const TEST_CHILD_RUN_ID = "child-run-uuid-012";
 
-const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID };
+const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID, "x-run-id": TEST_PARENT_RUN_ID };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCreateRun.mockResolvedValue(TEST_CHILD_RUN_ID);
 });
 
 // ─── Health ───
@@ -102,7 +113,8 @@ describe("Identity headers middleware", () => {
   it("returns 400 without x-org-id", async () => {
     const res = await request(app)
       .get("/auth/url")
-      .set("x-user-id", TEST_USER_ID);
+      .set("x-user-id", TEST_USER_ID)
+      .set("x-run-id", TEST_PARENT_RUN_ID);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("x-org-id");
   });
@@ -110,9 +122,44 @@ describe("Identity headers middleware", () => {
   it("returns 400 without x-user-id", async () => {
     const res = await request(app)
       .get("/auth/url")
-      .set("x-org-id", TEST_ORG_ID);
+      .set("x-org-id", TEST_ORG_ID)
+      .set("x-run-id", TEST_PARENT_RUN_ID);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("x-user-id");
+  });
+
+  it("returns 400 without x-run-id", async () => {
+    const res = await request(app)
+      .get("/auth/url")
+      .set("x-org-id", TEST_ORG_ID)
+      .set("x-user-id", TEST_USER_ID);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("x-run-id");
+  });
+});
+
+// ─── Run Creation ───
+
+describe("Run creation middleware", () => {
+  it("calls createRun with parent run ID, orgId, userId, and service", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app).get("/auth/url").set(idHeaders);
+
+    expect(mockCreateRun).toHaveBeenCalledWith({
+      parentRunId: TEST_PARENT_RUN_ID,
+      orgId: TEST_ORG_ID,
+      userId: TEST_USER_ID,
+      service: "google",
+    });
+  });
+
+  it("returns 502 when runs-service is unavailable", async () => {
+    mockCreateRun.mockRejectedValueOnce(new Error("Connection refused"));
+
+    const res = await request(app).get("/auth/url").set(idHeaders);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain("run tracking");
   });
 });
 
@@ -182,7 +229,7 @@ describe("GET /auth/callback", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.accountId).toBe("111");
-    expect(mockStoreRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, "111", "rt");
+    expect(mockStoreRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, "111", "rt", TEST_CHILD_RUN_ID);
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO accounts"),
       expect.arrayContaining([TEST_ORG_ID, TEST_USER_ID])
@@ -243,7 +290,7 @@ describe("GET /accounts/:accountId/campaigns", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "GET",
       path: "/accounts/:accountId/campaigns",
-    });
+    }, TEST_CHILD_RUN_ID);
   });
 
   it("filters by status", async () => {
@@ -405,7 +452,7 @@ describe("POST /accounts/:accountId/campaigns", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "POST",
       path: "/accounts/:accountId/campaigns",
-    });
+    }, TEST_CHILD_RUN_ID);
   });
 
   it("creates a campaign", async () => {
@@ -462,7 +509,7 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "PATCH",
       path: "/accounts/:accountId/campaigns/:campaignId",
-    });
+    }, TEST_CHILD_RUN_ID);
   });
 });
 
