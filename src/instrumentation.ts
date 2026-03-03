@@ -17,14 +17,13 @@ const registerSecrets = async () => {
 
   for (const secret of secrets) {
     try {
-      const res = await fetch(`${env.KEY_SERVICE_URL}/internal/app-keys`, {
+      const res = await fetch(`${env.KEY_SERVICE_URL}/internal/platform-keys`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-api-key": env.KEY_SERVICE_API_KEY,
         },
         body: JSON.stringify({
-          appId: "google-service",
           provider: secret.provider,
           apiKey: secret.apiKey,
         }),

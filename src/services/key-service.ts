@@ -11,15 +11,15 @@ const headers = () => ({
 });
 
 export const storeRefreshToken = async (
-  appId: string,
+  orgId: string,
   accountId: string,
   refreshToken: string
 ): Promise<void> => {
   const provider = `google-ads-refresh-${accountId}`;
-  const res = await fetch(`${env.KEY_SERVICE_URL}/internal/app-keys`, {
+  const res = await fetch(`${env.KEY_SERVICE_URL}/internal/keys`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ appId, provider, apiKey: refreshToken }),
+    body: JSON.stringify({ orgId, provider, apiKey: refreshToken }),
   });
   if (!res.ok) {
     throw new Error(`Failed to store refresh token: ${res.status} ${await res.text()}`);
@@ -27,13 +27,14 @@ export const storeRefreshToken = async (
 };
 
 export const getRefreshToken = async (
-  appId: string,
+  orgId: string,
+  userId: string,
   accountId: string,
   caller: CallerContext
 ): Promise<string> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(
-    `${env.KEY_SERVICE_URL}/internal/app-keys/${provider}/decrypt?appId=${encodeURIComponent(appId)}`,
+    `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt?orgId=${encodeURIComponent(orgId)}&userId=${encodeURIComponent(userId)}`,
     {
       headers: {
         ...headers(),
@@ -46,6 +47,6 @@ export const getRefreshToken = async (
   if (!res.ok) {
     throw new Error(`Failed to get refresh token: ${res.status}`);
   }
-  const data = (await res.json()) as { key: string };
+  const data = (await res.json()) as { key: string; keySource: string };
   return data.key;
 };

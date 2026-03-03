@@ -91,9 +91,6 @@
                   "type": "string",
                   "format": "uuid"
                 },
-                "appId": {
-                  "type": "string"
-                },
                 "orgId": {
                   "type": "string"
                 },
@@ -112,7 +109,6 @@
               },
               "required": [
                 "id",
-                "appId",
                 "orgId",
                 "userId",
                 "accountId",
@@ -135,9 +131,6 @@
             "type": "string",
             "format": "uuid"
           },
-          "appId": {
-            "type": "string"
-          },
           "orgId": {
             "type": "string"
           },
@@ -156,7 +149,6 @@
         },
         "required": [
           "id",
-          "appId",
           "orgId",
           "userId",
           "accountId",
@@ -501,10 +493,6 @@
       "CreateCampaignBody": {
         "type": "object",
         "properties": {
-          "appId": {
-            "type": "string",
-            "minLength": 1
-          },
           "name": {
             "type": "string",
             "minLength": 1
@@ -539,7 +527,6 @@
           }
         },
         "required": [
-          "appId",
           "name",
           "advertisingChannelType",
           "budgetAmountMicros"
@@ -603,10 +590,6 @@
       "UpdateCampaignBody": {
         "type": "object",
         "properties": {
-          "appId": {
-            "type": "string",
-            "minLength": 1
-          },
           "status": {
             "type": "string",
             "enum": [
@@ -625,9 +608,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "appId"
-        ],
         "additionalProperties": false
       },
       "UpdateCampaignResponse": {
@@ -687,18 +667,11 @@
       "DuplicateCampaignBody": {
         "type": "object",
         "properties": {
-          "appId": {
-            "type": "string",
-            "minLength": 1
-          },
           "newName": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "appId"
-        ],
         "additionalProperties": false
       },
       "DuplicateCampaignResponse": {
@@ -818,14 +791,6 @@
             "$ref": "#/components/parameters/UserId"
           },
           {
-            "name": "appId",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "redirectUri",
             "in": "query",
             "required": false,
@@ -911,21 +876,13 @@
     },
     "/accounts": {
       "get": {
-        "summary": "List linked Google Ads accounts for an app",
+        "summary": "List linked Google Ads accounts for an org",
         "parameters": [
           {
             "$ref": "#/components/parameters/OrgId"
           },
           {
             "$ref": "#/components/parameters/UserId"
-          },
-          {
-            "name": "appId",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -955,14 +912,6 @@
           {
             "name": "accountId",
             "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "appId",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -1057,14 +1006,6 @@
           {
             "name": "campaignId",
             "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "appId",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -1170,14 +1111,6 @@
             }
           },
           {
-            "name": "appId",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "startDate",
             "in": "query",
             "required": true,
@@ -1273,14 +1206,6 @@
           {
             "name": "accountId",
             "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "appId",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
