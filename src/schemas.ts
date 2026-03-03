@@ -11,7 +11,6 @@ export const HealthResponseSchema = z.object({
 // ─── Auth ───
 
 export const AuthUrlQuerySchema = z.object({
-  appId: z.string().min(1),
   redirectUri: z.string().url().optional(),
 });
 
@@ -32,13 +31,8 @@ export const AuthCallbackResponseSchema = z.object({
 
 // ─── Accounts ───
 
-export const AccountsQuerySchema = z.object({
-  appId: z.string().min(1),
-});
-
 export const AccountSchema = z.object({
   id: z.string().uuid(),
-  appId: z.string(),
   orgId: z.string(),
   userId: z.string(),
   accountId: z.string(),
@@ -59,7 +53,6 @@ export const CampaignStatusEnum = z.enum([
 ]);
 
 export const CampaignsQuerySchema = z.object({
-  appId: z.string().min(1),
   status: CampaignStatusEnum.optional(),
 });
 
@@ -95,7 +88,6 @@ export const CampaignDetailSchema = CampaignSchema.extend({
 // ─── Performance ───
 
 export const PerformanceQuerySchema = z.object({
-  appId: z.string().min(1),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -135,7 +127,6 @@ export const ConversionsResponseSchema = z.object({
 // ─── Create Campaign ───
 
 export const CreateCampaignBodySchema = z.object({
-  appId: z.string().min(1),
   name: z.string().min(1),
   advertisingChannelType: z.string().min(1),
   status: CampaignStatusEnum.default("PAUSED"),
@@ -153,7 +144,6 @@ export const CreateCampaignResponseSchema = z.object({
 // ─── Update Campaign ───
 
 export const UpdateCampaignBodySchema = z.object({
-  appId: z.string().min(1),
   status: CampaignStatusEnum.optional(),
   budgetAmountMicros: z.string().optional(),
   biddingStrategy: z.string().optional(),
@@ -168,7 +158,6 @@ export const UpdateCampaignResponseSchema = z.object({
 // ─── Duplicate Campaign ───
 
 export const DuplicateCampaignBodySchema = z.object({
-  appId: z.string().min(1),
   newName: z.string().min(1).optional(),
 });
 

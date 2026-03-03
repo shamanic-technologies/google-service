@@ -29,16 +29,16 @@ import {
 
 const router = Router();
 
-const resolveCustomer = async (appId: string, accountId: string, caller: CallerContext) => {
+const resolveCustomer = async (orgId: string, userId: string, accountId: string, caller: CallerContext) => {
   const accountResult = await query(
-    `SELECT refresh_token_provider FROM accounts WHERE app_id = $1 AND account_id = $2`,
-    [appId, accountId]
+    `SELECT refresh_token_provider FROM accounts WHERE org_id = $1 AND account_id = $2`,
+    [orgId, accountId]
   );
   if (accountResult.rows.length === 0) {
     throw new Error("Account not found");
   }
 
-  const refreshToken = await getRefreshToken(appId, accountId, caller);
+  const refreshToken = await getRefreshToken(orgId, userId, accountId, caller);
   const client = createGoogleAdsClient();
   return getCustomer(client, refreshToken, accountId);
 };
@@ -51,9 +51,9 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { accountId } = req.validatedParams as { accountId: string };
-      const { appId, status } = req.validatedQuery as { appId: string; status?: string };
+      const { status } = req.validatedQuery as { status?: string };
 
-      const customer = await resolveCustomer(appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const campaigns = await listCampaigns(customer, status);
 
       res.json({ campaigns });
@@ -69,16 +69,14 @@ router.get(
 router.get(
   "/accounts/:accountId/campaigns/:campaignId",
   validateParams(CampaignIdParamSchema),
-  validateQuery(CampaignsQuerySchema.pick({ appId: true })),
   async (req: Request, res: Response) => {
     try {
       const { accountId, campaignId } = req.validatedParams as {
         accountId: string;
         campaignId: string;
       };
-      const { appId } = req.validatedQuery as { appId: string };
 
-      const customer = await resolveCustomer(appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const campaign = await getCampaignDetail(customer, campaignId);
 
       if (!campaign) {
@@ -106,13 +104,12 @@ router.get(
         accountId: string;
         campaignId: string;
       };
-      const { appId, startDate, endDate } = req.validatedQuery as {
-        appId: string;
+      const { startDate, endDate } = req.validatedQuery as {
         startDate: string;
         endDate: string;
       };
 
-      const customer = await resolveCustomer(appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const metrics = await getCampaignPerformance(customer, campaignId, startDate, endDate);
 
       res.json({
@@ -133,13 +130,11 @@ router.get(
 router.get(
   "/accounts/:accountId/conversions",
   validateParams(AccountIdParamSchema),
-  validateQuery(CampaignsQuerySchema.pick({ appId: true })),
   async (req: Request, res: Response) => {
     try {
       const { accountId } = req.validatedParams as { accountId: string };
-      const { appId } = req.validatedQuery as { appId: string };
 
-      const customer = await resolveCustomer(appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const conversionActions = await listConversionActions(customer);
 
       res.json({ conversionActions });
@@ -160,7 +155,6 @@ router.post(
     try {
       const { accountId } = req.validatedParams as { accountId: string };
       const body = req.validatedBody as {
-        appId: string;
         name: string;
         advertisingChannelType: string;
         status: string;
@@ -170,7 +164,7 @@ router.post(
         endDate?: string;
       };
 
-      const customer = await resolveCustomer(body.appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const campaign = await createCampaign(customer, body);
 
       res.status(201).json({
@@ -197,14 +191,13 @@ router.patch(
         campaignId: string;
       };
       const body = req.validatedBody as {
-        appId: string;
         status?: string;
         budgetAmountMicros?: string;
         biddingStrategy?: string;
         name?: string;
       };
 
-      const customer = await resolveCustomer(body.appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const campaign = await updateCampaign(customer, campaignId, body);
 
       res.json({
@@ -230,9 +223,9 @@ router.post(
         accountId: string;
         campaignId: string;
       };
-      const body = req.validatedBody as { appId: string; newName?: string };
+      const body = req.validatedBody as { newName?: string };
 
-      const customer = await resolveCustomer(body.appId, accountId, { method: req.method, path: req.route.path });
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path });
       const campaign = await duplicateCampaign(customer, campaignId, body.newName);
 
       res.status(201).json({

@@ -101,7 +101,7 @@ describe("GET /health", () => {
 describe("Identity headers middleware", () => {
   it("returns 400 without x-org-id", async () => {
     const res = await request(app)
-      .get("/auth/url?appId=test-app")
+      .get("/auth/url")
       .set("x-user-id", TEST_USER_ID);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("x-org-id");
@@ -109,7 +109,7 @@ describe("Identity headers middleware", () => {
 
   it("returns 400 without x-user-id", async () => {
     const res = await request(app)
-      .get("/auth/url?appId=test-app")
+      .get("/auth/url")
       .set("x-org-id", TEST_ORG_ID);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("x-user-id");
@@ -119,15 +119,10 @@ describe("Identity headers middleware", () => {
 // ─── Auth URL ───
 
 describe("GET /auth/url", () => {
-  it("returns 400 without appId", async () => {
-    const res = await request(app).get("/auth/url").set(idHeaders);
-    expect(res.status).toBe(400);
-  });
-
-  it("generates OAuth URL with valid appId", async () => {
+  it("generates OAuth URL", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    const res = await request(app).get("/auth/url?appId=test-app").set(idHeaders);
+    const res = await request(app).get("/auth/url").set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.url).toContain("accounts.google.com");
     expect(res.body.url).toContain("test-client-id");
@@ -135,7 +130,7 @@ describe("GET /auth/url", () => {
 
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO oauth_states"),
-      expect.arrayContaining(["test-app", TEST_ORG_ID, TEST_USER_ID])
+      expect.arrayContaining([TEST_ORG_ID, TEST_USER_ID])
     );
   });
 });
@@ -162,7 +157,6 @@ describe("GET /auth/callback", () => {
     mockQuery
       .mockResolvedValueOnce({
         rows: [{
-          app_id: "test-app",
           org_id: TEST_ORG_ID,
           user_id: TEST_USER_ID,
           redirect_uri: "http://localhost:8080/auth/callback",
@@ -188,7 +182,7 @@ describe("GET /auth/callback", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.accountId).toBe("111");
-    expect(mockStoreRefreshToken).toHaveBeenCalledWith("test-app", "111", "rt");
+    expect(mockStoreRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, "111", "rt");
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO accounts"),
       expect.arrayContaining([TEST_ORG_ID, TEST_USER_ID])
@@ -199,17 +193,11 @@ describe("GET /auth/callback", () => {
 // ─── Accounts ───
 
 describe("GET /accounts", () => {
-  it("returns 400 without appId", async () => {
-    const res = await request(app).get("/accounts").set(idHeaders);
-    expect(res.status).toBe(400);
-  });
-
-  it("returns accounts for valid appId", async () => {
+  it("returns accounts for org", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
           id: "uuid-1",
-          app_id: "test-app",
           org_id: TEST_ORG_ID,
           user_id: TEST_USER_ID,
           account_id: "111",
@@ -219,7 +207,7 @@ describe("GET /accounts", () => {
       ],
     });
 
-    const res = await request(app).get("/accounts?appId=test-app").set(idHeaders);
+    const res = await request(app).get("/accounts").set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.accounts).toHaveLength(1);
     expect(res.body.accounts[0].accountId).toBe("111");
@@ -231,11 +219,6 @@ describe("GET /accounts", () => {
 // ─── Campaigns List ───
 
 describe("GET /accounts/:accountId/campaigns", () => {
-  it("returns 400 without appId", async () => {
-    const res = await request(app).get("/accounts/111/campaigns").set(idHeaders);
-    expect(res.status).toBe(400);
-  });
-
   it("returns campaigns list", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ refresh_token_provider: "google-ads-refresh-111" }],
@@ -252,12 +235,12 @@ describe("GET /accounts/:accountId/campaigns", () => {
     ]);
 
     const res = await request(app)
-      .get("/accounts/111/campaigns?appId=test-app")
+      .get("/accounts/111/campaigns")
       .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.campaigns).toHaveLength(1);
     expect(res.body.campaigns[0].name).toBe("Test Campaign");
-    expect(mockGetRefreshToken).toHaveBeenCalledWith("test-app", "111", {
+    expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "GET",
       path: "/accounts/:accountId/campaigns",
     });
@@ -272,7 +255,7 @@ describe("GET /accounts/:accountId/campaigns", () => {
     mockListCampaigns.mockResolvedValueOnce([]);
 
     const res = await request(app)
-      .get("/accounts/111/campaigns?appId=test-app&status=PAUSED")
+      .get("/accounts/111/campaigns?status=PAUSED")
       .set(idHeaders);
     expect(res.status).toBe(200);
     expect(mockListCampaigns).toHaveBeenCalledWith({}, "PAUSED");
@@ -297,7 +280,7 @@ describe("GET /accounts/:accountId/campaigns/:campaignId", () => {
     });
 
     const res = await request(app)
-      .get("/accounts/111/campaigns/123?appId=test-app")
+      .get("/accounts/111/campaigns/123")
       .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.id).toBe("123");
@@ -313,7 +296,7 @@ describe("GET /accounts/:accountId/campaigns/:campaignId", () => {
     mockGetCampaignDetail.mockResolvedValueOnce(null);
 
     const res = await request(app)
-      .get("/accounts/111/campaigns/999?appId=test-app")
+      .get("/accounts/111/campaigns/999")
       .set(idHeaders);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Campaign not found");
@@ -325,7 +308,7 @@ describe("GET /accounts/:accountId/campaigns/:campaignId", () => {
 describe("GET /accounts/:accountId/campaigns/:campaignId/performance", () => {
   it("returns 400 without date params", async () => {
     const res = await request(app)
-      .get("/accounts/111/campaigns/123/performance?appId=test-app")
+      .get("/accounts/111/campaigns/123/performance")
       .set(idHeaders);
     expect(res.status).toBe(400);
   });
@@ -348,7 +331,7 @@ describe("GET /accounts/:accountId/campaigns/:campaignId/performance", () => {
     });
 
     const res = await request(app)
-      .get("/accounts/111/campaigns/123/performance?appId=test-app&startDate=2024-01-01&endDate=2024-01-31")
+      .get("/accounts/111/campaigns/123/performance?startDate=2024-01-01&endDate=2024-01-31")
       .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.campaignId).toBe("123");
@@ -378,7 +361,7 @@ describe("GET /accounts/:accountId/conversions", () => {
     ]);
 
     const res = await request(app)
-      .get("/accounts/111/conversions?appId=test-app")
+      .get("/accounts/111/conversions")
       .set(idHeaders);
     expect(res.status).toBe(200);
     expect(res.body.conversionActions).toHaveLength(1);
@@ -415,12 +398,11 @@ describe("POST /accounts/:accountId/campaigns", () => {
       .post("/accounts/111/campaigns")
       .set(idHeaders)
       .send({
-        appId: "test-app",
         name: "New Campaign",
         advertisingChannelType: "SEARCH",
         budgetAmountMicros: "5000000",
       });
-    expect(mockGetRefreshToken).toHaveBeenCalledWith("test-app", "111", {
+    expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "POST",
       path: "/accounts/:accountId/campaigns",
     });
@@ -444,7 +426,6 @@ describe("POST /accounts/:accountId/campaigns", () => {
       .post("/accounts/111/campaigns")
       .set(idHeaders)
       .send({
-        appId: "test-app",
         name: "New Campaign",
         advertisingChannelType: "SEARCH",
         budgetAmountMicros: "5000000",
@@ -458,14 +439,6 @@ describe("POST /accounts/:accountId/campaigns", () => {
 // ─── Update Campaign ───
 
 describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
-  it("returns 400 without appId in body", async () => {
-    const res = await request(app)
-      .patch("/accounts/111/campaigns/123")
-      .set(idHeaders)
-      .send({ status: "PAUSED" });
-    expect(res.status).toBe(400);
-  });
-
   it("updates a campaign", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ refresh_token_provider: "google-ads-refresh-111" }],
@@ -482,11 +455,11 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
     const res = await request(app)
       .patch("/accounts/111/campaigns/123")
       .set(idHeaders)
-      .send({ appId: "test-app", status: "PAUSED" });
+      .send({ status: "PAUSED" });
     expect(res.status).toBe(200);
     expect(res.body.campaign.status).toBe("PAUSED");
     expect(res.body.message).toBe("Campaign updated successfully");
-    expect(mockGetRefreshToken).toHaveBeenCalledWith("test-app", "111", {
+    expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "PATCH",
       path: "/accounts/:accountId/campaigns/:campaignId",
     });
@@ -496,14 +469,6 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
 // ─── Duplicate Campaign ───
 
 describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
-  it("returns 400 without appId", async () => {
-    const res = await request(app)
-      .post("/accounts/111/campaigns/123/duplicate")
-      .set(idHeaders)
-      .send({});
-    expect(res.status).toBe(400);
-  });
-
   it("duplicates a campaign", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ refresh_token_provider: "google-ads-refresh-111" }],
@@ -520,7 +485,7 @@ describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
     const res = await request(app)
       .post("/accounts/111/campaigns/123/duplicate")
       .set(idHeaders)
-      .send({ appId: "test-app" });
+      .send({});
     expect(res.status).toBe(201);
     expect(res.body.campaign.id).toBe("999");
     expect(res.body.message).toBe("Campaign duplicated successfully");
@@ -542,7 +507,7 @@ describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
     const res = await request(app)
       .post("/accounts/111/campaigns/123/duplicate")
       .set(idHeaders)
-      .send({ appId: "test-app", newName: "AB Test Variant B" });
+      .send({ newName: "AB Test Variant B" });
     expect(res.status).toBe(201);
     expect(res.body.campaign.name).toBe("AB Test Variant B");
   });
@@ -555,7 +520,7 @@ describe("Account not found error handling", () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
-      .get("/accounts/999/campaigns?appId=test-app")
+      .get("/accounts/999/campaigns")
       .set(idHeaders);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Account not found");

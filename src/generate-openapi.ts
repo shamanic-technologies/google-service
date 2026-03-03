@@ -84,7 +84,6 @@ const spec = {
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
-          { name: "appId", in: "query", required: true, schema: { type: "string" } },
           { name: "redirectUri", in: "query", required: false, schema: { type: "string" } },
         ],
         responses: {
@@ -138,11 +137,10 @@ const spec = {
     },
     "/accounts": {
       get: {
-        summary: "List linked Google Ads accounts for an app",
+        summary: "List linked Google Ads accounts for an org",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
-          { name: "appId", in: "query", required: true, schema: { type: "string" } },
         ],
         responses: {
           "200": {
@@ -163,7 +161,6 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
-          { name: "appId", in: "query", required: true, schema: { type: "string" } },
           {
             name: "status",
             in: "query",
@@ -216,7 +213,6 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
-          { name: "appId", in: "query", required: true, schema: { type: "string" } },
         ],
         responses: {
           "200": {
@@ -273,7 +269,6 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
-          { name: "appId", in: "query", required: true, schema: { type: "string" } },
           {
             name: "startDate",
             in: "query",
@@ -334,7 +329,6 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
-          { name: "appId", in: "query", required: true, schema: { type: "string" } },
         ],
         responses: {
           "200": {

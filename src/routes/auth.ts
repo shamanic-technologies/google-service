@@ -21,7 +21,7 @@ router.get(
   validateQuery(AuthUrlQuerySchema),
   async (req: Request, res: Response) => {
     try {
-      const { appId, redirectUri } = req.validatedQuery as { appId: string; redirectUri?: string };
+      const { redirectUri } = req.validatedQuery as { redirectUri?: string };
       const orgId = req.orgId!;
       const userId = req.userId!;
       const state = uuidv4();
@@ -30,8 +30,8 @@ router.get(
         redirectUri || `${req.protocol}://${req.get("host")}/auth/callback`;
 
       await query(
-        `INSERT INTO oauth_states (state, app_id, org_id, user_id, redirect_uri) VALUES ($1, $2, $3, $4, $5)`,
-        [state, appId, orgId, userId, callbackUri]
+        `INSERT INTO oauth_states (state, org_id, user_id, redirect_uri) VALUES ($1, $2, $3, $4)`,
+        [state, orgId, userId, callbackUri]
       );
 
       const params = new URLSearchParams({
@@ -62,7 +62,7 @@ router.get(
       };
 
       const stateResult = await query(
-        `SELECT app_id, org_id, user_id, redirect_uri FROM oauth_states
+        `SELECT org_id, user_id, redirect_uri FROM oauth_states
          WHERE state = $1 AND expires_at > NOW()`,
         [state]
       );
@@ -72,7 +72,7 @@ router.get(
         return;
       }
 
-      const { app_id: appId, org_id: orgId, user_id: userId, redirect_uri: redirectUri } = stateResult.rows[0];
+      const { org_id: orgId, user_id: userId, redirect_uri: redirectUri } = stateResult.rows[0];
 
       await query(`DELETE FROM oauth_states WHERE state = $1`, [state]);
 
@@ -87,14 +87,14 @@ router.get(
       }
 
       for (const account of accounts) {
-        await storeRefreshToken(appId, account.id, tokens.refresh_token);
+        await storeRefreshToken(orgId, account.id, tokens.refresh_token);
 
         await query(
-          `INSERT INTO accounts (app_id, org_id, user_id, account_id, refresh_token_provider, mcc_id)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (app_id, account_id) DO UPDATE
-           SET refresh_token_provider = $5, mcc_id = $6, org_id = $2, user_id = $3`,
-          [appId, orgId, userId, account.id, `google-ads-refresh-${account.id}`, env.GOOGLE_MCC_ACCOUNT_ID]
+          `INSERT INTO accounts (org_id, user_id, account_id, refresh_token_provider, mcc_id)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (org_id, account_id) DO UPDATE
+           SET refresh_token_provider = $4, mcc_id = $5, user_id = $2`,
+          [orgId, userId, account.id, `google-ads-refresh-${account.id}`, env.GOOGLE_MCC_ACCOUNT_ID]
         );
       }
 
