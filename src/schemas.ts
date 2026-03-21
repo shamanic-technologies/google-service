@@ -166,6 +166,70 @@ export const DuplicateCampaignResponseSchema = z.object({
   message: z.string(),
 });
 
+// ─── Search ───
+
+export const WebSearchBodySchema = z.object({
+  query: z.string().min(1),
+  num: z.number().int().min(1).max(100).optional(),
+  gl: z.string().length(2).optional(),
+  hl: z.string().min(2).max(5).optional(),
+});
+
+export const WebSearchResultSchema = z.object({
+  title: z.string(),
+  link: z.string(),
+  snippet: z.string(),
+  domain: z.string(),
+  position: z.number(),
+});
+
+export const WebSearchResponseSchema = z.object({
+  results: z.array(WebSearchResultSchema),
+});
+
+export const NewsSearchBodySchema = z.object({
+  query: z.string().min(1),
+  num: z.number().int().min(1).max(100).optional(),
+  gl: z.string().length(2).optional(),
+  hl: z.string().min(2).max(5).optional(),
+  tbs: z.string().optional(),
+});
+
+export const NewsSearchResultSchema = z.object({
+  title: z.string(),
+  link: z.string(),
+  snippet: z.string(),
+  source: z.string(),
+  date: z.string(),
+  domain: z.string(),
+});
+
+export const NewsSearchResponseSchema = z.object({
+  results: z.array(NewsSearchResultSchema),
+});
+
+export const BatchSearchQuerySchema = z.object({
+  query: z.string().min(1),
+  type: z.enum(["web", "news"]),
+  num: z.number().int().min(1).max(100).optional(),
+  gl: z.string().length(2).optional(),
+  hl: z.string().min(2).max(5).optional(),
+});
+
+export const BatchSearchBodySchema = z.object({
+  queries: z.array(BatchSearchQuerySchema).min(1).max(50),
+});
+
+export const BatchSearchResultItemSchema = z.object({
+  query: z.string(),
+  type: z.enum(["web", "news"]),
+  results: z.array(z.union([WebSearchResultSchema, NewsSearchResultSchema])),
+});
+
+export const BatchSearchResponseSchema = z.object({
+  results: z.array(BatchSearchResultItemSchema),
+});
+
 // ─── Error ───
 
 export const ErrorResponseSchema = z.object({
