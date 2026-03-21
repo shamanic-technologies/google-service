@@ -43,6 +43,15 @@ const spec = {
       UpdateCampaignResponse: toSchema(schemas.UpdateCampaignResponseSchema),
       DuplicateCampaignBody: toSchema(schemas.DuplicateCampaignBodySchema),
       DuplicateCampaignResponse: toSchema(schemas.DuplicateCampaignResponseSchema),
+      WebSearchBody: toSchema(schemas.WebSearchBodySchema),
+      WebSearchResult: toSchema(schemas.WebSearchResultSchema),
+      WebSearchResponse: toSchema(schemas.WebSearchResponseSchema),
+      NewsSearchBody: toSchema(schemas.NewsSearchBodySchema),
+      NewsSearchResult: toSchema(schemas.NewsSearchResultSchema),
+      NewsSearchResponse: toSchema(schemas.NewsSearchResponseSchema),
+      BatchSearchBody: toSchema(schemas.BatchSearchBodySchema),
+      BatchSearchResultItem: toSchema(schemas.BatchSearchResultItemSchema),
+      BatchSearchResponse: toSchema(schemas.BatchSearchResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
     },
     parameters: {
@@ -353,6 +362,144 @@ const spec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ConversionsResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/search/web": {
+      post: {
+        summary: "Web search via Serper.dev (Google index)",
+        description:
+          "Performs a web search using the Serper.dev API and returns organic results from Google's index.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/WebSearchBody" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Search results",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WebSearchResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request body",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "502": {
+            description: "Serper API error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/search/news": {
+      post: {
+        summary: "News search via Serper.dev (Google News index)",
+        description:
+          "Performs a news search using the Serper.dev API and returns news results from Google's index.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/NewsSearchBody" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "News search results",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/NewsSearchResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request body",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "502": {
+            description: "Serper API error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/search/batch": {
+      post: {
+        summary: "Batch search — multiple queries in one call",
+        description:
+          "Performs multiple web and/or news searches in parallel and returns all results.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BatchSearchBody" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Batch search results",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BatchSearchResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request body",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "502": {
+            description: "Serper API error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },

@@ -728,6 +728,447 @@
         ],
         "additionalProperties": false
       },
+      "WebSearchBody": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "num": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "gl": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "hl": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 5
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "WebSearchResult": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "link",
+          "snippet",
+          "domain",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "WebSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "link": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "domain": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "title",
+                "link",
+                "snippet",
+                "domain",
+                "position"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "NewsSearchBody": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "num": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "gl": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "hl": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 5
+          },
+          "tbs": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "NewsSearchResult": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "link",
+          "snippet",
+          "source",
+          "date",
+          "domain"
+        ],
+        "additionalProperties": false
+      },
+      "NewsSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "link": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "domain": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "link",
+                "snippet",
+                "source",
+                "date",
+                "domain"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "BatchSearchBody": {
+        "type": "object",
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "web",
+                    "news"
+                  ]
+                },
+                "num": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "gl": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                "hl": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 5
+                }
+              },
+              "required": [
+                "query",
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "additionalProperties": false
+      },
+      "BatchSearchResultItem": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "web",
+              "news"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "link": {
+                      "type": "string"
+                    },
+                    "snippet": {
+                      "type": "string"
+                    },
+                    "domain": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "link",
+                    "snippet",
+                    "domain",
+                    "position"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "link": {
+                      "type": "string"
+                    },
+                    "snippet": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "domain": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "link",
+                    "snippet",
+                    "source",
+                    "date",
+                    "domain"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "query",
+          "type",
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "BatchSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "web",
+                    "news"
+                  ]
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "link": {
+                            "type": "string"
+                          },
+                          "snippet": {
+                            "type": "string"
+                          },
+                          "domain": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "link",
+                          "snippet",
+                          "domain",
+                          "position"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "link": {
+                            "type": "string"
+                          },
+                          "snippet": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string"
+                          },
+                          "domain": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "link",
+                          "snippet",
+                          "source",
+                          "date",
+                          "domain"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "query",
+                "type",
+                "results"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
@@ -1258,6 +1699,183 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/web": {
+      "post": {
+        "summary": "Web search via Serper.dev (Google index)",
+        "description": "Performs a web search using the Serper.dev API and returns organic results from Google's index.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebSearchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Serper API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/news": {
+      "post": {
+        "summary": "News search via Serper.dev (Google News index)",
+        "description": "Performs a news search using the Serper.dev API and returns news results from Google's index.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsSearchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "News search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Serper API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/batch": {
+      "post": {
+        "summary": "Batch search — multiple queries in one call",
+        "description": "Performs multiple web and/or news searches in parallel and returns all results.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchSearchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Serper API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

@@ -17,6 +17,8 @@ const {
   mockUpdateCampaign,
   mockDuplicateCampaign,
   mockGetCustomer,
+  mockSearchWeb,
+  mockSearchNews,
 } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
   mockStoreRefreshToken: vi.fn(),
@@ -32,6 +34,8 @@ const {
   mockUpdateCampaign: vi.fn(),
   mockDuplicateCampaign: vi.fn(),
   mockGetCustomer: vi.fn(),
+  mockSearchWeb: vi.fn(),
+  mockSearchNews: vi.fn(),
 }));
 
 vi.mock("../env", () => ({
@@ -48,6 +52,7 @@ vi.mock("../env", () => ({
     API_REGISTRY_API_KEY: "test-registry-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
     RUNS_SERVICE_API_KEY: "test-runs-service-key",
+    SERPER_API_KEY: "test-serper-key",
   },
 }));
 
@@ -63,6 +68,11 @@ vi.mock("../services/key-service", () => ({
 
 vi.mock("../services/runs-service", () => ({
   createRun: (...args: unknown[]) => mockCreateRun(...args),
+}));
+
+vi.mock("../services/serper", () => ({
+  searchWeb: (...args: unknown[]) => mockSearchWeb(...args),
+  searchNews: (...args: unknown[]) => mockSearchNews(...args),
 }));
 
 vi.mock("../services/google-ads", () => ({
@@ -571,6 +581,178 @@ describe("Account not found error handling", () => {
       .set(idHeaders);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Account not found");
+  });
+});
+
+// ─── Search Web ───
+
+describe("POST /search/web", () => {
+  it("returns 400 with empty query", async () => {
+    const res = await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns web search results", async () => {
+    mockSearchWeb.mockResolvedValueOnce([
+      {
+        title: "TechCrunch",
+        link: "https://techcrunch.com",
+        snippet: "Tech news",
+        domain: "techcrunch.com",
+        position: 1,
+      },
+    ]);
+
+    const res = await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "best tech publications" });
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(1);
+    expect(res.body.results[0].title).toBe("TechCrunch");
+    expect(res.body.results[0].domain).toBe("techcrunch.com");
+    expect(mockSearchWeb).toHaveBeenCalledWith({
+      query: "best tech publications",
+    });
+  });
+
+  it("passes optional params to serper", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "startups", num: 5, gl: "us", hl: "en" });
+    expect(mockSearchWeb).toHaveBeenCalledWith({
+      query: "startups",
+      num: 5,
+      gl: "us",
+      hl: "en",
+    });
+  });
+
+  it("returns 502 when serper fails", async () => {
+    mockSearchWeb.mockRejectedValueOnce(new Error("Serper web search failed: 500"));
+
+    const res = await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain("Serper");
+  });
+});
+
+// ─── Search News ───
+
+describe("POST /search/news", () => {
+  it("returns 400 with empty query", async () => {
+    const res = await request(app)
+      .post("/search/news")
+      .set(idHeaders)
+      .send({ query: "" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns news search results", async () => {
+    mockSearchNews.mockResolvedValueOnce([
+      {
+        title: "Startup raises $10M",
+        link: "https://techcrunch.com/article",
+        snippet: "A startup raised funding",
+        source: "TechCrunch",
+        date: "2 hours ago",
+        domain: "techcrunch.com",
+      },
+    ]);
+
+    const res = await request(app)
+      .post("/search/news")
+      .set(idHeaders)
+      .send({ query: "startup funding", tbs: "qdr:w" });
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(1);
+    expect(res.body.results[0].source).toBe("TechCrunch");
+    expect(mockSearchNews).toHaveBeenCalledWith({
+      query: "startup funding",
+      tbs: "qdr:w",
+    });
+  });
+
+  it("returns 502 when serper fails", async () => {
+    mockSearchNews.mockRejectedValueOnce(new Error("Serper news search failed: 500"));
+
+    const res = await request(app)
+      .post("/search/news")
+      .set(idHeaders)
+      .send({ query: "test" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain("Serper");
+  });
+});
+
+// ─── Search Batch ───
+
+describe("POST /search/batch", () => {
+  it("returns 400 with empty queries array", async () => {
+    const res = await request(app)
+      .post("/search/batch")
+      .set(idHeaders)
+      .send({ queries: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns batch results for mixed web and news queries", async () => {
+    mockSearchWeb.mockResolvedValueOnce([
+      {
+        title: "Result 1",
+        link: "https://example.com",
+        snippet: "Snippet 1",
+        domain: "example.com",
+        position: 1,
+      },
+    ]);
+    mockSearchNews.mockResolvedValueOnce([
+      {
+        title: "News 1",
+        link: "https://news.example.com",
+        snippet: "News snippet",
+        source: "Example News",
+        date: "1 day ago",
+        domain: "news.example.com",
+      },
+    ]);
+
+    const res = await request(app)
+      .post("/search/batch")
+      .set(idHeaders)
+      .send({
+        queries: [
+          { query: "web query", type: "web" },
+          { query: "news query", type: "news" },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(2);
+    expect(res.body.results[0].type).toBe("web");
+    expect(res.body.results[0].results).toHaveLength(1);
+    expect(res.body.results[1].type).toBe("news");
+    expect(res.body.results[1].results).toHaveLength(1);
+  });
+
+  it("returns 502 when any search fails", async () => {
+    mockSearchWeb.mockRejectedValueOnce(new Error("Serper web search failed: 500"));
+
+    const res = await request(app)
+      .post("/search/batch")
+      .set(idHeaders)
+      .send({
+        queries: [{ query: "failing query", type: "web" }],
+      });
+    expect(res.status).toBe(502);
   });
 });
 
