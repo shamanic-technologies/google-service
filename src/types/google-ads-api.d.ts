@@ -27,3 +27,4 @@ declare module "google-ads-api" {
     };
   }
 }
+
