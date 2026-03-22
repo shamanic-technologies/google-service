@@ -19,6 +19,7 @@ const {
   mockGetCustomer,
   mockSearchWeb,
   mockSearchNews,
+  mockGetSerperApiKey,
 } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
   mockStoreRefreshToken: vi.fn(),
@@ -36,6 +37,7 @@ const {
   mockGetCustomer: vi.fn(),
   mockSearchWeb: vi.fn(),
   mockSearchNews: vi.fn(),
+  mockGetSerperApiKey: vi.fn(),
 }));
 
 vi.mock("../env", () => ({
@@ -52,7 +54,6 @@ vi.mock("../env", () => ({
     API_REGISTRY_API_KEY: "test-registry-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
     RUNS_SERVICE_API_KEY: "test-runs-service-key",
-    SERPER_API_KEY: "test-serper-key",
   },
 }));
 
@@ -64,6 +65,7 @@ vi.mock("../db/client", () => ({
 vi.mock("../services/key-service", () => ({
   storeRefreshToken: (...args: unknown[]) => mockStoreRefreshToken(...args),
   getRefreshToken: (...args: unknown[]) => mockGetRefreshToken(...args),
+  getSerperApiKey: (...args: unknown[]) => mockGetSerperApiKey(...args),
 }));
 
 vi.mock("../services/runs-service", () => ({
@@ -103,6 +105,7 @@ const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID, "x-run-i
 beforeEach(() => {
   vi.clearAllMocks();
   mockCreateRun.mockResolvedValue(TEST_CHILD_RUN_ID);
+  mockGetSerperApiKey.mockResolvedValue("test-serper-key");
 });
 
 // ─── Health ───
@@ -614,9 +617,10 @@ describe("POST /search/web", () => {
     expect(res.body.results).toHaveLength(1);
     expect(res.body.results[0].title).toBe("TechCrunch");
     expect(res.body.results[0].domain).toBe("techcrunch.com");
-    expect(mockSearchWeb).toHaveBeenCalledWith({
-      query: "best tech publications",
-    });
+    expect(mockSearchWeb).toHaveBeenCalledWith(
+      { query: "best tech publications" },
+      "test-serper-key"
+    );
   });
 
   it("passes optional params to serper", async () => {
@@ -626,12 +630,10 @@ describe("POST /search/web", () => {
       .post("/search/web")
       .set(idHeaders)
       .send({ query: "startups", num: 5, gl: "us", hl: "en" });
-    expect(mockSearchWeb).toHaveBeenCalledWith({
-      query: "startups",
-      num: 5,
-      gl: "us",
-      hl: "en",
-    });
+    expect(mockSearchWeb).toHaveBeenCalledWith(
+      { query: "startups", num: 5, gl: "us", hl: "en" },
+      "test-serper-key"
+    );
   });
 
   it("returns 502 when serper fails", async () => {
@@ -643,6 +645,17 @@ describe("POST /search/web", () => {
       .send({ query: "test" });
     expect(res.status).toBe(502);
     expect(res.body.error).toContain("Serper");
+  });
+
+  it("returns 502 when Serper API key is not found", async () => {
+    mockGetSerperApiKey.mockRejectedValueOnce(new Error("Failed to get Serper API key: 404"));
+
+    const res = await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain("Serper API key");
   });
 });
 
@@ -676,10 +689,10 @@ describe("POST /search/news", () => {
     expect(res.status).toBe(200);
     expect(res.body.results).toHaveLength(1);
     expect(res.body.results[0].source).toBe("TechCrunch");
-    expect(mockSearchNews).toHaveBeenCalledWith({
-      query: "startup funding",
-      tbs: "qdr:w",
-    });
+    expect(mockSearchNews).toHaveBeenCalledWith(
+      { query: "startup funding", tbs: "qdr:w" },
+      "test-serper-key"
+    );
   });
 
   it("returns 502 when serper fails", async () => {

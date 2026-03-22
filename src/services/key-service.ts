@@ -56,3 +56,29 @@ export const getRefreshToken = async (
   const data = (await res.json()) as { key: string; keySource: string };
   return data.key;
 };
+
+export const getSerperApiKey = async (
+  orgId: string,
+  userId: string,
+  caller: CallerContext,
+  runId?: string
+): Promise<string> => {
+  const provider = "serper";
+  const res = await fetch(
+    `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt?orgId=${encodeURIComponent(orgId)}&userId=${encodeURIComponent(userId)}`,
+    {
+      headers: {
+        ...headers(),
+        "X-Caller-Service": "google",
+        "X-Caller-Method": caller.method,
+        "X-Caller-Path": caller.path,
+        ...(runId ? { "x-run-id": runId } : {}),
+      },
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to get Serper API key: ${res.status}`);
+  }
+  const data = (await res.json()) as { key: string; keySource: string };
+  return data.key;
+};
