@@ -3,9 +3,6 @@ import { env } from "./env";
 export const registerWithServices = async () => {
   // Register OAuth secrets with key-service
   await registerSecrets();
-
-  // Register with API Registry
-  await registerWithApiRegistry();
 };
 
 const registerSecrets = async () => {
@@ -37,39 +34,5 @@ const registerSecrets = async () => {
     } catch (err) {
       console.warn(`Failed to register secret ${secret.provider}:`, err);
     }
-  }
-};
-
-const registerWithApiRegistry = async () => {
-  if (!env.API_REGISTRY_URL || !env.API_REGISTRY_API_KEY) {
-    console.log("API Registry not configured, skipping registration");
-    return;
-  }
-
-  try {
-    const serviceUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : `http://localhost:${env.PORT}`;
-
-    const res = await fetch(`${env.API_REGISTRY_URL}/services`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": env.API_REGISTRY_API_KEY,
-      },
-      body: JSON.stringify({
-        name: "google",
-        baseUrl: serviceUrl,
-        openapiUrl: `${serviceUrl}/openapi.json`,
-      }),
-    });
-
-    if (!res.ok) {
-      console.warn(`Failed to register with API Registry: ${res.status}`);
-    } else {
-      console.log("Registered with API Registry");
-    }
-  } catch (err) {
-    console.warn("Failed to register with API Registry:", err);
   }
 };
