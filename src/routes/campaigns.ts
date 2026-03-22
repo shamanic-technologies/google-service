@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { query } from "../db/client";
-import { getRefreshToken, CallerContext } from "../services/key-service";
+import { getRefreshToken, getGoogleCredentials, CallerContext } from "../services/key-service";
 import {
   createGoogleAdsClient,
   getCustomer,
@@ -38,9 +38,12 @@ const resolveCustomer = async (orgId: string, userId: string, accountId: string,
     throw new Error("Account not found");
   }
 
-  const refreshToken = await getRefreshToken(orgId, userId, accountId, caller, runId);
-  const client = createGoogleAdsClient();
-  return getCustomer(client, refreshToken, accountId);
+  const [refreshToken, creds] = await Promise.all([
+    getRefreshToken(orgId, userId, accountId, caller, runId),
+    getGoogleCredentials(caller, runId),
+  ]);
+  const client = createGoogleAdsClient(creds);
+  return getCustomer(client, refreshToken, accountId, creds.mccAccountId);
 };
 
 // GET /accounts/:accountId/campaigns

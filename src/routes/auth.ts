@@ -1,8 +1,7 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { query } from "../db/client";
-import { env } from "../env";
-import { storeRefreshToken } from "../services/key-service";
+import { storeRefreshToken, getGoogleCredentials } from "../services/key-service";
 import {
   exchangeCodeForTokens,
   createGoogleAdsClient,
@@ -29,13 +28,15 @@ router.get(
       const callbackUri =
         redirectUri || `${req.protocol}://${req.get("host")}/auth/callback`;
 
+      const creds = await getGoogleCredentials({ method: req.method, path: req.route.path }, req.runId);
+
       await query(
         `INSERT INTO oauth_states (state, org_id, user_id, redirect_uri) VALUES ($1, $2, $3, $4)`,
         [state, orgId, userId, callbackUri]
       );
 
       const params = new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
+        client_id: creds.clientId,
         redirect_uri: callbackUri,
         response_type: "code",
         scope: SCOPES,
@@ -76,10 +77,11 @@ router.get(
 
       await query(`DELETE FROM oauth_states WHERE state = $1`, [state]);
 
-      const tokens = await exchangeCodeForTokens(code, redirectUri);
+      const creds = await getGoogleCredentials({ method: req.method, path: req.route.path }, req.runId);
+      const tokens = await exchangeCodeForTokens(code, redirectUri, creds);
 
-      const client = createGoogleAdsClient();
-      const accounts = await listAccessibleAccounts(client, tokens.refresh_token);
+      const client = createGoogleAdsClient(creds);
+      const accounts = await listAccessibleAccounts(client, tokens.refresh_token, creds.mccAccountId);
 
       if (accounts.length === 0) {
         res.status(400).json({ error: "No accessible Google Ads accounts found" });
@@ -94,7 +96,7 @@ router.get(
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (org_id, account_id) DO UPDATE
            SET refresh_token_provider = $4, mcc_id = $5, user_id = $2`,
-          [orgId, userId, account.id, `google-ads-refresh-${account.id}`, env.GOOGLE_MCC_ACCOUNT_ID]
+          [orgId, userId, account.id, `google-ads-refresh-${account.id}`, creds.mccAccountId]
         );
       }
 
