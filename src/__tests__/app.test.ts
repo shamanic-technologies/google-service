@@ -50,8 +50,6 @@ vi.mock("../env", () => ({
     GOOGLE_MCC_ACCOUNT_ID: "1234567890",
     KEY_SERVICE_URL: "http://localhost:3001",
     KEY_SERVICE_API_KEY: "test-key-service-key",
-    API_REGISTRY_URL: "http://localhost:3000",
-    API_REGISTRY_API_KEY: "test-registry-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
     RUNS_SERVICE_API_KEY: "test-runs-service-key",
   },
