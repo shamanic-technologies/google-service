@@ -39,10 +39,12 @@ export const getRefreshToken = async (
 ): Promise<string> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(
-    `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt?orgId=${encodeURIComponent(orgId)}&userId=${encodeURIComponent(userId)}`,
+    `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt`,
     {
       headers: {
         ...headers(),
+        "x-org-id": orgId,
+        "x-user-id": userId,
         "X-Caller-Service": "google",
         "X-Caller-Method": caller.method,
         "X-Caller-Path": caller.path,
@@ -63,7 +65,7 @@ export const getSerperApiKey = async (
   caller: CallerContext,
   runId?: string
 ): Promise<string> => {
-  const provider = "serper";
+  const provider = "serper-dev";
   const res = await fetch(
     `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt`,
     {
