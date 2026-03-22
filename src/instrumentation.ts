@@ -41,6 +41,11 @@ const registerSecrets = async () => {
 };
 
 const registerWithApiRegistry = async () => {
+  if (!env.API_REGISTRY_URL || !env.API_REGISTRY_API_KEY) {
+    console.log("API Registry not configured, skipping registration");
+    return;
+  }
+
   try {
     const serviceUrl = process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
