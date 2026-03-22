@@ -65,10 +65,12 @@ export const getSerperApiKey = async (
 ): Promise<string> => {
   const provider = "serper";
   const res = await fetch(
-    `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt?orgId=${encodeURIComponent(orgId)}&userId=${encodeURIComponent(userId)}`,
+    `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt`,
     {
       headers: {
         ...headers(),
+        "x-org-id": orgId,
+        "x-user-id": userId,
         "X-Caller-Service": "google",
         "X-Caller-Method": caller.method,
         "X-Caller-Path": caller.path,
