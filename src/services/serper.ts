@@ -1,5 +1,3 @@
-import { env } from "../env";
-
 interface SerperWebResult {
   title?: string;
   link?: string;
@@ -28,9 +26,9 @@ interface SerperNewsParams extends SerperSearchParams {
 
 const SERPER_BASE_URL = "https://google.serper.dev";
 
-const serperHeaders = () => ({
+const serperHeaders = (apiKey: string) => ({
   "Content-Type": "application/json",
-  "X-API-KEY": env.SERPER_API_KEY,
+  "X-API-KEY": apiKey,
 });
 
 const extractDomain = (url: string): string => {
@@ -41,10 +39,10 @@ const extractDomain = (url: string): string => {
   }
 };
 
-export const searchWeb = async (params: SerperSearchParams) => {
+export const searchWeb = async (params: SerperSearchParams, apiKey: string) => {
   const res = await fetch(`${SERPER_BASE_URL}/search`, {
     method: "POST",
-    headers: serperHeaders(),
+    headers: serperHeaders(apiKey),
     body: JSON.stringify({
       q: params.query,
       num: params.num ?? 10,
@@ -67,10 +65,10 @@ export const searchWeb = async (params: SerperSearchParams) => {
   }));
 };
 
-export const searchNews = async (params: SerperNewsParams) => {
+export const searchNews = async (params: SerperNewsParams, apiKey: string) => {
   const res = await fetch(`${SERPER_BASE_URL}/news`, {
     method: "POST",
-    headers: serperHeaders(),
+    headers: serperHeaders(apiKey),
     body: JSON.stringify({
       q: params.query,
       num: params.num ?? 10,
