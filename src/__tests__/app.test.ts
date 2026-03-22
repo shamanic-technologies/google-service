@@ -6,6 +6,7 @@ const {
   mockQuery,
   mockStoreRefreshToken,
   mockGetRefreshToken,
+  mockGetGoogleCredentials,
   mockCreateRun,
   mockExchangeCodeForTokens,
   mockListAccessibleAccounts,
@@ -24,6 +25,7 @@ const {
   mockQuery: vi.fn(),
   mockStoreRefreshToken: vi.fn(),
   mockGetRefreshToken: vi.fn(),
+  mockGetGoogleCredentials: vi.fn(),
   mockCreateRun: vi.fn(),
   mockExchangeCodeForTokens: vi.fn(),
   mockListAccessibleAccounts: vi.fn(),
@@ -43,11 +45,7 @@ const {
 vi.mock("../env", () => ({
   env: {
     PORT: 8080,
-    DATABASE_URL: "postgresql://test:test@localhost:5432/test",
-    GOOGLE_CLIENT_ID: "test-client-id",
-    GOOGLE_CLIENT_SECRET: "test-client-secret",
-    GOOGLE_DEVELOPER_TOKEN: "test-dev-token",
-    GOOGLE_MCC_ACCOUNT_ID: "1234567890",
+    GOOGLE_SERVICE_DATABASE_URL: "postgresql://test:test@localhost:5432/test",
     KEY_SERVICE_URL: "http://localhost:3001",
     KEY_SERVICE_API_KEY: "test-key-service-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
@@ -63,6 +61,7 @@ vi.mock("../db/client", () => ({
 vi.mock("../services/key-service", () => ({
   storeRefreshToken: (...args: unknown[]) => mockStoreRefreshToken(...args),
   getRefreshToken: (...args: unknown[]) => mockGetRefreshToken(...args),
+  getGoogleCredentials: (...args: unknown[]) => mockGetGoogleCredentials(...args),
   getSerperApiKey: (...args: unknown[]) => mockGetSerperApiKey(...args),
 }));
 
@@ -100,10 +99,18 @@ const TEST_CHILD_RUN_ID = "child-run-uuid-012";
 
 const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID, "x-run-id": TEST_PARENT_RUN_ID };
 
+const TEST_GOOGLE_CREDS = {
+  clientId: "test-client-id",
+  clientSecret: "test-client-secret",
+  developerToken: "test-dev-token",
+  mccAccountId: "1234567890",
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockCreateRun.mockResolvedValue(TEST_CHILD_RUN_ID);
   mockGetSerperApiKey.mockResolvedValue("test-serper-key");
+  mockGetGoogleCredentials.mockResolvedValue(TEST_GOOGLE_CREDS);
 });
 
 // ─── Health ───

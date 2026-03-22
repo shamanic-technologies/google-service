@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-import { env } from "../env";
+import type { GoogleCredentials } from "./key-service";
 
 // Use lightweight interfaces instead of importing the massive protobuf types
 // from google-ads-api which causes tsc OOM
@@ -39,31 +39,33 @@ const getGoogleAdsApiClass = () => {
   return _GoogleAdsApi;
 };
 
-export const createGoogleAdsClient = (): GoogleAdsClient =>
+export const createGoogleAdsClient = (creds: GoogleCredentials): GoogleAdsClient =>
   new (getGoogleAdsApiClass())({
-    client_id: env.GOOGLE_CLIENT_ID,
-    client_secret: env.GOOGLE_CLIENT_SECRET,
-    developer_token: env.GOOGLE_DEVELOPER_TOKEN,
+    client_id: creds.clientId,
+    client_secret: creds.clientSecret,
+    developer_token: creds.developerToken,
   });
 
 export const getCustomer = (
   client: GoogleAdsClient,
   refreshToken: string,
-  customerId: string
+  customerId: string,
+  mccAccountId: string
 ): GoogleAdsCustomer =>
   client.Customer({
     customer_id: customerId,
-    login_customer_id: env.GOOGLE_MCC_ACCOUNT_ID,
+    login_customer_id: mccAccountId,
     refresh_token: refreshToken,
   });
 
 export const listAccessibleAccounts = async (
   client: GoogleAdsClient,
-  refreshToken: string
+  refreshToken: string,
+  mccAccountId: string
 ): Promise<Array<{ id: string; name: string; descriptiveName: string }>> => {
   const customer = client.Customer({
-    customer_id: env.GOOGLE_MCC_ACCOUNT_ID,
-    login_customer_id: env.GOOGLE_MCC_ACCOUNT_ID,
+    customer_id: mccAccountId,
+    login_customer_id: mccAccountId,
     refresh_token: refreshToken,
   });
 
@@ -347,15 +349,16 @@ export const duplicateCampaign = async (
 
 export const exchangeCodeForTokens = async (
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  creds: GoogleCredentials
 ): Promise<{ access_token: string; refresh_token: string }> => {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),

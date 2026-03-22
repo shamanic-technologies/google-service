@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { env } from "../env";
 
 export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: env.GOOGLE_SERVICE_DATABASE_URL,
   max: 10,
 });
 
