@@ -19,8 +19,11 @@ export const requireIdentityHeaders = (req: Request, res: Response, next: NextFu
     return;
   }
 
+  const featureSlug = req.headers["x-feature-slug"];
+
   req.orgId = orgId;
   req.userId = userId;
+  req.featureSlug = typeof featureSlug === "string" ? featureSlug : undefined;
   next();
 };
 
@@ -69,6 +72,7 @@ declare global {
       orgId?: string;
       userId?: string;
       runId?: string;
+      featureSlug?: string;
     }
   }
 }

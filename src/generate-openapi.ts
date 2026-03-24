@@ -76,6 +76,13 @@ const spec = {
         schema: { type: "string" },
         description: "Caller's run ID from runs-service (used as parentRunId when creating a child run)",
       },
+      FeatureSlug: {
+        name: "x-feature-slug",
+        in: "header",
+        required: false,
+        schema: { type: "string" },
+        description: "Feature slug for tracking which feature triggered the request",
+      },
     },
   },
   paths: {
@@ -101,6 +108,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "redirectUri", in: "query", required: false, schema: { type: "string" } },
         ],
         responses: {
@@ -130,6 +138,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "code", in: "query", required: true, schema: { type: "string" } },
           { name: "state", in: "query", required: true, schema: { type: "string" } },
         ],
@@ -160,6 +169,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
         ],
         responses: {
           "200": {
@@ -180,6 +190,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           {
             name: "status",
@@ -205,6 +216,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         requestBody: {
@@ -233,6 +245,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -261,6 +274,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -291,6 +305,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
           {
@@ -325,6 +340,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -354,6 +370,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: {
@@ -377,6 +394,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
         ],
         requestBody: {
           required: true,
@@ -423,6 +441,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
         ],
         requestBody: {
           required: true,
@@ -469,6 +488,7 @@ const spec = {
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
         ],
         requestBody: {
           required: true,
