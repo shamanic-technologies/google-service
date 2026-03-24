@@ -14,6 +14,7 @@ export const createRequestRun = async (
       orgId: req.orgId!,
       userId: req.userId!,
       service: "google",
+      featureSlug: req.featureSlug,
     });
 
     req.runId = runId;

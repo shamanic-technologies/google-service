@@ -40,6 +40,19 @@ DO $$ BEGIN
     ALTER TABLE oauth_states DROP COLUMN app_id;
   END IF;
 END $$;
+
+-- Migration: add feature_slug columns (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'feature_slug') THEN
+    ALTER TABLE accounts ADD COLUMN feature_slug TEXT;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'oauth_states' AND column_name = 'feature_slug') THEN
+    ALTER TABLE oauth_states ADD COLUMN feature_slug TEXT;
+  END IF;
+END $$;
 `;
 
 async function migrate() {

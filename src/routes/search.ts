@@ -16,7 +16,8 @@ const resolveSerperKey = async (req: Request): Promise<string> => {
     req.orgId!,
     req.userId!,
     { method: req.method, path: req.route?.path ?? req.path },
-    req.runId
+    req.runId,
+    req.featureSlug
   );
 };
 

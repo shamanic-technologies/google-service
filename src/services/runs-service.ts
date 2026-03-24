@@ -10,17 +10,22 @@ export interface CreateRunParams {
   orgId: string;
   userId: string;
   service: string;
+  featureSlug?: string;
 }
 
 export const createRun = async (params: CreateRunParams): Promise<string> => {
   const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/runs`, {
     method: "POST",
-    headers: headers(),
+    headers: {
+      ...headers(),
+      ...(params.featureSlug ? { "x-feature-slug": params.featureSlug } : {}),
+    },
     body: JSON.stringify({
       parentRunId: params.parentRunId,
       orgId: params.orgId,
       userId: params.userId,
       service: params.service,
+      featureSlug: params.featureSlug,
     }),
   });
 

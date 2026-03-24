@@ -156,6 +156,40 @@ describe("Identity headers middleware", () => {
   });
 });
 
+// ─── Feature Slug ───
+
+describe("x-feature-slug header propagation", () => {
+  it("passes featureSlug to createRun when header is present", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app)
+      .get("/auth/url")
+      .set({ ...idHeaders, "x-feature-slug": "my-feature" });
+
+    expect(mockCreateRun).toHaveBeenCalledWith({
+      parentRunId: TEST_PARENT_RUN_ID,
+      orgId: TEST_ORG_ID,
+      userId: TEST_USER_ID,
+      service: "google",
+      featureSlug: "my-feature",
+    });
+  });
+
+  it("passes undefined featureSlug when header is absent", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app).get("/auth/url").set(idHeaders);
+
+    expect(mockCreateRun).toHaveBeenCalledWith({
+      parentRunId: TEST_PARENT_RUN_ID,
+      orgId: TEST_ORG_ID,
+      userId: TEST_USER_ID,
+      service: "google",
+      featureSlug: undefined,
+    });
+  });
+});
+
 // ─── Run Creation ───
 
 describe("Run creation middleware", () => {
@@ -169,6 +203,7 @@ describe("Run creation middleware", () => {
       orgId: TEST_ORG_ID,
       userId: TEST_USER_ID,
       service: "google",
+      featureSlug: undefined,
     });
   });
 
@@ -247,7 +282,7 @@ describe("GET /auth/callback", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.accountId).toBe("111");
-    expect(mockStoreRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, "111", "rt", TEST_CHILD_RUN_ID);
+    expect(mockStoreRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, "111", "rt", TEST_CHILD_RUN_ID, undefined);
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO accounts"),
       expect.arrayContaining([TEST_ORG_ID, TEST_USER_ID])
@@ -308,7 +343,7 @@ describe("GET /accounts/:accountId/campaigns", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "GET",
       path: "/accounts/:accountId/campaigns",
-    }, TEST_CHILD_RUN_ID);
+    }, TEST_CHILD_RUN_ID, undefined);
   });
 
   it("filters by status", async () => {
@@ -470,7 +505,7 @@ describe("POST /accounts/:accountId/campaigns", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "POST",
       path: "/accounts/:accountId/campaigns",
-    }, TEST_CHILD_RUN_ID);
+    }, TEST_CHILD_RUN_ID, undefined);
   });
 
   it("creates a campaign", async () => {
@@ -527,7 +562,7 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "PATCH",
       path: "/accounts/:accountId/campaigns/:campaignId",
-    }, TEST_CHILD_RUN_ID);
+    }, TEST_CHILD_RUN_ID, undefined);
   });
 });
 
