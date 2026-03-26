@@ -1,6 +1,6 @@
 import { env } from "../env";
 
-const headers = () => ({
+const baseHeaders = () => ({
   "Content-Type": "application/json",
   "x-api-key": env.RUNS_SERVICE_API_KEY,
 });
@@ -17,15 +17,15 @@ export const createRun = async (params: CreateRunParams): Promise<string> => {
   const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/runs`, {
     method: "POST",
     headers: {
-      ...headers(),
+      ...baseHeaders(),
+      "x-org-id": params.orgId,
+      "x-user-id": params.userId,
+      ...(params.parentRunId ? { "x-run-id": params.parentRunId } : {}),
       ...(params.featureSlug ? { "x-feature-slug": params.featureSlug } : {}),
     },
     body: JSON.stringify({
-      parentRunId: params.parentRunId,
-      orgId: params.orgId,
-      userId: params.userId,
-      service: params.service,
-      featureSlug: params.featureSlug,
+      serviceName: params.service,
+      taskName: "request",
     }),
   });
 
@@ -33,6 +33,6 @@ export const createRun = async (params: CreateRunParams): Promise<string> => {
     throw new Error(`Failed to create run: ${res.status} ${await res.text()}`);
   }
 
-  const data = (await res.json()) as { runId: string };
-  return data.runId;
+  const data = (await res.json()) as { id: string };
+  return data.id;
 };
