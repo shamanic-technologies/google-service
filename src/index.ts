@@ -1,10 +1,17 @@
 import { createApp } from "./app";
 import { env } from "./env";
+import { registerPlatformKeys } from "./services/key-service";
 
 const app = createApp();
 
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, async () => {
   console.log(`[google-service] listening on port ${env.PORT}`);
+  try {
+    await registerPlatformKeys();
+    console.log("[google-service] Platform keys registered successfully");
+  } catch (err) {
+    console.error("[google-service] Failed to register platform keys:", err);
+  }
 });
 
 process.on("unhandledRejection", (reason) => {
