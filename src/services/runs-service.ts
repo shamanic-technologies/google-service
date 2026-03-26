@@ -30,7 +30,9 @@ export const createRun = async (params: CreateRunParams): Promise<string> => {
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to create run: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    console.error(`[google-service] Failed to create run: ${res.status} body=${body}`);
+    throw new Error(`Failed to create run: ${res.status} ${body}`);
   }
 
   const data = (await res.json()) as { id: string };

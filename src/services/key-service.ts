@@ -16,6 +16,7 @@ export const getPlatformKey = async (
   runId?: string,
   featureSlug?: string
 ): Promise<string> => {
+  console.log(`[google-service] Resolving platform key: provider=${provider}`);
   const res = await fetch(
     `${env.KEY_SERVICE_URL}/keys/platform/${provider}/decrypt`,
     {
@@ -30,6 +31,7 @@ export const getPlatformKey = async (
     }
   );
   if (!res.ok) {
+    console.error(`[google-service] Failed to get platform key ${provider}: ${res.status}`);
     throw new Error(`Failed to get platform key ${provider}: ${res.status}`);
   }
   const data = (await res.json()) as { key: string };
@@ -118,6 +120,7 @@ export const getSerperApiKey = async (
   featureSlug?: string
 ): Promise<string> => {
   const provider = "serper-dev";
+  console.log(`[google-service] Resolving Serper key: orgId=${orgId}`);
   const res = await fetch(
     `${env.KEY_SERVICE_URL}/keys/${provider}/decrypt`,
     {
@@ -134,6 +137,7 @@ export const getSerperApiKey = async (
     }
   );
   if (!res.ok) {
+    console.error(`[google-service] Failed to get Serper API key: ${res.status}`);
     throw new Error(`Failed to get Serper API key: ${res.status}`);
   }
   const data = (await res.json()) as { key: string; keySource: string };

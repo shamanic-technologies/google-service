@@ -18,9 +18,10 @@ export const createRequestRun = async (
     });
 
     req.runId = runId;
+    console.log(`[google-service] Run created: runId=${runId} parentRunId=${parentRunId ?? "none"}`);
     next();
   } catch (err) {
-    console.error("Failed to create request run:", err);
+    console.error("[google-service] Failed to create request run:", err);
     res.status(502).json({ error: "Failed to initialize run tracking" });
   }
 };

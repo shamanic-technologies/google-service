@@ -6,6 +6,6 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  console.error("Unhandled error:", err);
+  console.error("[google-service] Unhandled error:", err);
   res.status(500).json({ error: err.message || "Internal server error" });
 };
