@@ -40,6 +40,7 @@ const extractDomain = (url: string): string => {
 };
 
 export const searchWeb = async (params: SerperSearchParams, apiKey: string) => {
+  console.log(`[google-service] Serper web search: q="${params.query}" num=${params.num ?? 10} gl=${params.gl ?? "default"}`);
   const res = await fetch(`${SERPER_BASE_URL}/search`, {
     method: "POST",
     headers: serperHeaders(apiKey),
@@ -52,7 +53,9 @@ export const searchWeb = async (params: SerperSearchParams, apiKey: string) => {
   });
 
   if (!res.ok) {
-    throw new Error(`Serper web search failed: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    console.error(`[google-service] Serper web search failed: ${res.status} body=${body}`);
+    throw new Error(`Serper web search failed: ${res.status} ${body}`);
   }
 
   const data = (await res.json()) as { organic?: SerperWebResult[] };
@@ -66,6 +69,7 @@ export const searchWeb = async (params: SerperSearchParams, apiKey: string) => {
 };
 
 export const searchNews = async (params: SerperNewsParams, apiKey: string) => {
+  console.log(`[google-service] Serper news search: q="${params.query}" num=${params.num ?? 10} gl=${params.gl ?? "default"}`);
   const res = await fetch(`${SERPER_BASE_URL}/news`, {
     method: "POST",
     headers: serperHeaders(apiKey),
@@ -79,7 +83,9 @@ export const searchNews = async (params: SerperNewsParams, apiKey: string) => {
   });
 
   if (!res.ok) {
-    throw new Error(`Serper news search failed: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    console.error(`[google-service] Serper news search failed: ${res.status} body=${body}`);
+    throw new Error(`Serper news search failed: ${res.status} ${body}`);
   }
 
   const data = (await res.json()) as { news?: SerperNewsResult[] };
