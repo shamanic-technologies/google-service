@@ -50,7 +50,6 @@ vi.mock("../env", () => ({
     KEY_SERVICE_API_KEY: "test-key-service-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
     RUNS_SERVICE_API_KEY: "test-runs-service-key",
-    SERPER_DEV_API_KEY: "test-serper-dev-api-key",
   },
 }));
 
@@ -64,7 +63,6 @@ vi.mock("../services/key-service", () => ({
   getRefreshToken: (...args: unknown[]) => mockGetRefreshToken(...args),
   getGoogleCredentials: (...args: unknown[]) => mockGetGoogleCredentials(...args),
   getSerperApiKey: (...args: unknown[]) => mockGetSerperApiKey(...args),
-  registerPlatformKeys: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../services/runs-service", () => ({
