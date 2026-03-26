@@ -13,6 +13,8 @@ const router = Router();
 
 const resolveSerperKey = async (req: Request): Promise<string> => {
   return getSerperApiKey(
+    req.orgId!,
+    req.userId!,
     { method: req.method, path: req.route?.path ?? req.path },
     req.runId,
     req.featureSlug
