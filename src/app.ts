@@ -7,11 +7,13 @@ import searchRoutes from "./routes/search";
 import { errorHandler } from "./middleware/error-handler";
 import { requireIdentityHeaders } from "./middleware/validate";
 import { createRequestRun } from "./middleware/create-request-run";
+import { requestLogger } from "./middleware/request-logger";
 
 export const createApp = () => {
   const app = express();
 
   app.use(express.json());
+  app.use(requestLogger);
 
   app.use(healthRoutes);
 
