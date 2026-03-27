@@ -13,7 +13,7 @@ import { z } from "zod";
 
 const router = Router();
 
-const SERPER_COST_NAME = "serper-search-credit";
+const SERPER_COST_NAME = "serper-dev-search-query";
 
 const resolveSerperKey = async (req: Request): Promise<SerperKeyResult> => {
   return getSerperApiKey(
