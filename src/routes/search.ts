@@ -56,7 +56,8 @@ const reportCosts = (
     req.runId,
     [{ costName: SERPER_COST_NAME, quantity, costSource }],
     req.orgId!,
-    req.userId!
+    req.userId!,
+    req.featureSlug
   ).catch((err) => {
     console.error(`[google-service] Failed to report costs for run ${req.runId}:`, err);
   });
