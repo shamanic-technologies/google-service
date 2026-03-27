@@ -744,8 +744,8 @@ describe("POST /search/web", () => {
       .send({ query: "test" });
 
     expect(mockAuthorizeCredits).toHaveBeenCalledWith(
-      [{ costName: "serper-dev-search-query", quantity: 1 }],
-      "serper-web-search",
+      [{ costName: "serper-dev-query", quantity: 1 }],
+      "serper-dev-query",
       TEST_ORG_ID,
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
@@ -777,7 +777,7 @@ describe("POST /search/web", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(mockAddCosts).toHaveBeenCalledWith(
       TEST_CHILD_RUN_ID,
-      [{ costName: "serper-dev-search-query", quantity: 1, costSource: "platform" }],
+      [{ costName: "serper-dev-query", quantity: 1, costSource: "platform" }],
       TEST_ORG_ID,
       TEST_USER_ID,
       undefined
@@ -796,7 +796,7 @@ describe("POST /search/web", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(mockAddCosts).toHaveBeenCalledWith(
       TEST_CHILD_RUN_ID,
-      [{ costName: "serper-dev-search-query", quantity: 1, costSource: "org" }],
+      [{ costName: "serper-dev-query", quantity: 1, costSource: "org" }],
       TEST_ORG_ID,
       TEST_USER_ID,
       undefined
@@ -895,8 +895,8 @@ describe("POST /search/news", () => {
       .send({ query: "test" });
 
     expect(mockAuthorizeCredits).toHaveBeenCalledWith(
-      [{ costName: "serper-dev-search-query", quantity: 1 }],
-      "serper-news-search",
+      [{ costName: "serper-dev-query", quantity: 1 }],
+      "serper-dev-query",
       TEST_ORG_ID,
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
@@ -942,8 +942,8 @@ describe("POST /search/batch", () => {
       });
 
     expect(mockAuthorizeCredits).toHaveBeenCalledWith(
-      [{ costName: "serper-dev-search-query", quantity: 2 }],
-      "serper-batch-search x2",
+      [{ costName: "serper-dev-query", quantity: 2 }],
+      "serper-dev-query",
       TEST_ORG_ID,
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
@@ -1007,7 +1007,7 @@ describe("POST /search/batch", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(mockAddCosts).toHaveBeenCalledWith(
       TEST_CHILD_RUN_ID,
-      [{ costName: "serper-dev-search-query", quantity: 3, costSource: "platform" }],
+      [{ costName: "serper-dev-query", quantity: 3, costSource: "platform" }],
       TEST_ORG_ID,
       TEST_USER_ID,
       undefined
