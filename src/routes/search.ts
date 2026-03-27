@@ -13,7 +13,7 @@ import { z } from "zod";
 
 const router = Router();
 
-const SERPER_COST_NAME = "serper-dev-search-query";
+const SERPER_COST_NAME = "serper-dev-query";
 
 const resolveSerperKey = async (req: Request): Promise<SerperKeyResult> => {
   return getSerperApiKey(
@@ -72,7 +72,7 @@ router.post(
       const { key: apiKey, keySource } = await resolveSerperKey(req);
 
       if (keySource === "app") {
-        await authorizeBilling(req, 1, "serper-web-search");
+        await authorizeBilling(req, 1, "serper-dev-query");
       }
 
       const body = req.validatedBody as z.infer<typeof WebSearchBodySchema>;
@@ -100,7 +100,7 @@ router.post(
       const { key: apiKey, keySource } = await resolveSerperKey(req);
 
       if (keySource === "app") {
-        await authorizeBilling(req, 1, "serper-news-search");
+        await authorizeBilling(req, 1, "serper-dev-query");
       }
 
       const body = req.validatedBody as z.infer<typeof NewsSearchBodySchema>;
@@ -130,7 +130,7 @@ router.post(
       const queryCount = body.queries.length;
 
       if (keySource === "app") {
-        await authorizeBilling(req, queryCount, `serper-batch-search x${queryCount}`);
+        await authorizeBilling(req, queryCount, "serper-dev-query");
       }
 
       console.log(`[google-service] /search/batch ${queryCount} queries`);
