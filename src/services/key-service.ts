@@ -112,13 +112,18 @@ export const getRefreshToken = async (
   return data.key;
 };
 
+export interface SerperKeyResult {
+  key: string;
+  keySource: "app" | "byok";
+}
+
 export const getSerperApiKey = async (
   orgId: string,
   userId: string,
   caller: CallerContext,
   runId?: string,
   featureSlug?: string
-): Promise<string> => {
+): Promise<SerperKeyResult> => {
   const provider = "serper-dev";
   console.log(`[google-service] Resolving Serper key via auto-resolve: orgId=${orgId}`);
   const res = await fetch(
@@ -143,5 +148,5 @@ export const getSerperApiKey = async (
   }
   const data = (await res.json()) as { key: string; keySource: string };
   console.log(`[google-service] Serper key resolved: keySource=${data.keySource}`);
-  return data.key;
+  return { key: data.key, keySource: data.keySource as "app" | "byok" };
 };
