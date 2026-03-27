@@ -8,6 +8,9 @@ const {
   mockGetRefreshToken,
   mockGetGoogleCredentials,
   mockCreateRun,
+  mockUpdateRun,
+  mockAddCosts,
+  mockAuthorizeCredits,
   mockExchangeCodeForTokens,
   mockListAccessibleAccounts,
   mockListCampaigns,
@@ -27,6 +30,9 @@ const {
   mockGetRefreshToken: vi.fn(),
   mockGetGoogleCredentials: vi.fn(),
   mockCreateRun: vi.fn(),
+  mockUpdateRun: vi.fn(),
+  mockAddCosts: vi.fn(),
+  mockAuthorizeCredits: vi.fn(),
   mockExchangeCodeForTokens: vi.fn(),
   mockListAccessibleAccounts: vi.fn(),
   mockListCampaigns: vi.fn(),
@@ -50,6 +56,8 @@ vi.mock("../env", () => ({
     KEY_SERVICE_API_KEY: "test-key-service-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
     RUNS_SERVICE_API_KEY: "test-runs-service-key",
+    BILLING_SERVICE_URL: "http://localhost:3003",
+    BILLING_SERVICE_API_KEY: "test-billing-service-key",
   },
 }));
 
@@ -67,6 +75,12 @@ vi.mock("../services/key-service", () => ({
 
 vi.mock("../services/runs-service", () => ({
   createRun: (...args: unknown[]) => mockCreateRun(...args),
+  updateRun: (...args: unknown[]) => mockUpdateRun(...args),
+  addCosts: (...args: unknown[]) => mockAddCosts(...args),
+}));
+
+vi.mock("../services/billing-client", () => ({
+  authorizeCredits: (...args: unknown[]) => mockAuthorizeCredits(...args),
 }));
 
 vi.mock("../services/serper", () => ({
@@ -109,7 +123,10 @@ const TEST_GOOGLE_CREDS = {
 beforeEach(() => {
   vi.clearAllMocks();
   mockCreateRun.mockResolvedValue(TEST_CHILD_RUN_ID);
-  mockGetSerperApiKey.mockResolvedValue("test-serper-key");
+  mockUpdateRun.mockResolvedValue(undefined);
+  mockAddCosts.mockResolvedValue(undefined);
+  mockAuthorizeCredits.mockResolvedValue({ sufficient: true, balance_cents: 10000, required_cents: 100 });
+  mockGetSerperApiKey.mockResolvedValue({ key: "test-serper-key", keySource: "app" });
   mockGetGoogleCredentials.mockResolvedValue(TEST_GOOGLE_CREDS);
 });
 
@@ -213,6 +230,40 @@ describe("Run creation middleware", () => {
     const res = await request(app).get("/auth/url").set(idHeaders);
     expect(res.status).toBe(502);
     expect(res.body.error).toContain("run tracking");
+  });
+});
+
+// ─── Run Closing ───
+
+describe("Run closing on response finish", () => {
+  it("closes run as completed on successful response", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: "uuid-1",
+        org_id: TEST_ORG_ID,
+        user_id: TEST_USER_ID,
+        account_id: "111",
+        mcc_id: "1234567890",
+        created_at: new Date("2024-01-01"),
+      }],
+    });
+
+    const res = await request(app).get("/accounts").set(idHeaders);
+    expect(res.status).toBe(200);
+
+    // Wait for async finish handler
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID);
+  });
+
+  it("closes run as failed on error response", async () => {
+    mockQuery.mockRejectedValueOnce(new Error("DB error"));
+
+    const res = await request(app).get("/accounts").set(idHeaders);
+    expect(res.status).toBe(500);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "failed", TEST_ORG_ID, TEST_USER_ID);
   });
 });
 
@@ -663,6 +714,83 @@ describe("POST /search/web", () => {
     );
   });
 
+  it("authorizes billing before platform-key search", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+
+    expect(mockAuthorizeCredits).toHaveBeenCalledWith(
+      [{ costName: "serper-search-credit", quantity: 1 }],
+      "serper-web-search",
+      TEST_ORG_ID,
+      TEST_USER_ID,
+      TEST_CHILD_RUN_ID,
+      undefined
+    );
+  });
+
+  it("skips billing for BYOK key", async () => {
+    mockGetSerperApiKey.mockResolvedValueOnce({ key: "user-key", keySource: "byok" });
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+
+    expect(mockAuthorizeCredits).not.toHaveBeenCalled();
+  });
+
+  it("reports costs after successful search", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+
+    // Wait for async cost reporting
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockAddCosts).toHaveBeenCalledWith(
+      TEST_CHILD_RUN_ID,
+      [{ costName: "serper-search-credit", quantity: 1, costSource: "platform" }],
+      TEST_ORG_ID,
+      TEST_USER_ID
+    );
+  });
+
+  it("reports costs as org for BYOK", async () => {
+    mockGetSerperApiKey.mockResolvedValueOnce({ key: "user-key", keySource: "byok" });
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockAddCosts).toHaveBeenCalledWith(
+      TEST_CHILD_RUN_ID,
+      [{ costName: "serper-search-credit", quantity: 1, costSource: "org" }],
+      TEST_ORG_ID,
+      TEST_USER_ID
+    );
+  });
+
+  it("returns 402 when credits are insufficient", async () => {
+    mockAuthorizeCredits.mockResolvedValueOnce({ sufficient: false, balance_cents: 5, required_cents: 100 });
+
+    const res = await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+    expect(res.status).toBe(402);
+    expect(res.body.error).toContain("Insufficient credits");
+  });
+
   it("passes optional params to serper", async () => {
     mockSearchWeb.mockResolvedValueOnce([]);
 
@@ -735,6 +863,24 @@ describe("POST /search/news", () => {
     );
   });
 
+  it("authorizes billing before platform-key search", async () => {
+    mockSearchNews.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/news")
+      .set(idHeaders)
+      .send({ query: "test" });
+
+    expect(mockAuthorizeCredits).toHaveBeenCalledWith(
+      [{ costName: "serper-search-credit", quantity: 1 }],
+      "serper-news-search",
+      TEST_ORG_ID,
+      TEST_USER_ID,
+      TEST_CHILD_RUN_ID,
+      undefined
+    );
+  });
+
   it("returns 502 when serper fails", async () => {
     mockSearchNews.mockRejectedValueOnce(new Error("Serper news search failed: 500"));
 
@@ -756,6 +902,30 @@ describe("POST /search/batch", () => {
       .set(idHeaders)
       .send({ queries: [] });
     expect(res.status).toBe(400);
+  });
+
+  it("authorizes billing for batch quantity", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+    mockSearchNews.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/batch")
+      .set(idHeaders)
+      .send({
+        queries: [
+          { query: "web query", type: "web" },
+          { query: "news query", type: "news" },
+        ],
+      });
+
+    expect(mockAuthorizeCredits).toHaveBeenCalledWith(
+      [{ costName: "serper-search-credit", quantity: 2 }],
+      "serper-batch-search x2",
+      TEST_ORG_ID,
+      TEST_USER_ID,
+      TEST_CHILD_RUN_ID,
+      undefined
+    );
   });
 
   it("returns batch results for mixed web and news queries", async () => {
@@ -794,6 +964,30 @@ describe("POST /search/batch", () => {
     expect(res.body.results[0].results).toHaveLength(1);
     expect(res.body.results[1].type).toBe("news");
     expect(res.body.results[1].results).toHaveLength(1);
+  });
+
+  it("reports batch costs with correct quantity", async () => {
+    mockSearchWeb.mockResolvedValue([]);
+    mockSearchNews.mockResolvedValue([]);
+
+    await request(app)
+      .post("/search/batch")
+      .set(idHeaders)
+      .send({
+        queries: [
+          { query: "q1", type: "web" },
+          { query: "q2", type: "web" },
+          { query: "q3", type: "news" },
+        ],
+      });
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockAddCosts).toHaveBeenCalledWith(
+      TEST_CHILD_RUN_ID,
+      [{ costName: "serper-search-credit", quantity: 3, costSource: "platform" }],
+      TEST_ORG_ID,
+      TEST_USER_ID
+    );
   });
 
   it("returns 502 when any search fails", async () => {

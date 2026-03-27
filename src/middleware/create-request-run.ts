@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { createRun } from "../services/runs-service";
+import { createRun, updateRun } from "../services/runs-service";
 
 export const createRequestRun = async (
   req: Request,
@@ -19,6 +19,14 @@ export const createRequestRun = async (
 
     req.runId = runId;
     console.log(`[google-service] Run created: runId=${runId} parentRunId=${parentRunId ?? "none"}`);
+
+    res.on("finish", () => {
+      const status = res.statusCode < 400 ? "completed" : "failed";
+      updateRun(runId, status, req.orgId!, req.userId!).catch((err) => {
+        console.error(`[google-service] Failed to close run ${runId} as ${status}:`, err);
+      });
+    });
+
     next();
   } catch (err) {
     console.error("[google-service] Failed to create request run:", err);

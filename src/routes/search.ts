@@ -6,12 +6,16 @@ import {
   BatchSearchBodySchema,
 } from "../schemas";
 import { searchWeb, searchNews } from "../services/serper";
-import { getSerperApiKey } from "../services/key-service";
+import { getSerperApiKey, SerperKeyResult } from "../services/key-service";
+import { authorizeCredits } from "../services/billing-client";
+import { addCosts } from "../services/runs-service";
 import { z } from "zod";
 
 const router = Router();
 
-const resolveSerperKey = async (req: Request): Promise<string> => {
+const SERPER_COST_NAME = "serper-search-credit";
+
+const resolveSerperKey = async (req: Request): Promise<SerperKeyResult> => {
   return getSerperApiKey(
     req.orgId!,
     req.userId!,
@@ -21,23 +25,67 @@ const resolveSerperKey = async (req: Request): Promise<string> => {
   );
 };
 
+const authorizeBilling = async (
+  req: Request,
+  quantity: number,
+  description: string
+): Promise<void> => {
+  const result = await authorizeCredits(
+    [{ costName: SERPER_COST_NAME, quantity }],
+    description,
+    req.orgId!,
+    req.userId!,
+    req.runId,
+    req.featureSlug
+  );
+  if (!result.sufficient) {
+    throw Object.assign(
+      new Error(`Insufficient credits: need ${result.required_cents}¢, have ${result.balance_cents}¢`),
+      { statusCode: 402 }
+    );
+  }
+};
+
+const reportCosts = (
+  req: Request,
+  quantity: number,
+  costSource: "platform" | "org"
+): void => {
+  if (!req.runId || quantity === 0) return;
+  addCosts(
+    req.runId,
+    [{ costName: SERPER_COST_NAME, quantity, costSource }],
+    req.orgId!,
+    req.userId!
+  ).catch((err) => {
+    console.error(`[google-service] Failed to report costs for run ${req.runId}:`, err);
+  });
+};
+
 router.post(
   "/search/web",
   validateBody(WebSearchBodySchema),
   async (req: Request, res: Response) => {
     try {
       console.log(`[google-service] /search/web resolving Serper key orgId=${req.orgId}`);
-      const apiKey = await resolveSerperKey(req);
+      const { key: apiKey, keySource } = await resolveSerperKey(req);
+
+      if (keySource === "app") {
+        await authorizeBilling(req, 1, "serper-web-search");
+      }
+
       const body = req.validatedBody as z.infer<typeof WebSearchBodySchema>;
       console.log(`[google-service] /search/web query="${body.query}" num=${body.num ?? 10}`);
       const results = await searchWeb(body, apiKey);
       console.log(`[google-service] /search/web returned ${results.length} results`);
+
+      reportCosts(req, 1, keySource === "app" ? "platform" : "org");
+
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/web error:`, err);
-      const msg = (err as Error).message;
-      const status = msg.includes("Failed to get Serper API key") ? 502 : 502;
-      res.status(status).json({ error: msg });
+      const error = err as Error & { statusCode?: number };
+      res.status(error.statusCode ?? 502).json({ error: error.message });
     }
   }
 );
@@ -48,16 +96,24 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       console.log(`[google-service] /search/news resolving Serper key orgId=${req.orgId}`);
-      const apiKey = await resolveSerperKey(req);
+      const { key: apiKey, keySource } = await resolveSerperKey(req);
+
+      if (keySource === "app") {
+        await authorizeBilling(req, 1, "serper-news-search");
+      }
+
       const body = req.validatedBody as z.infer<typeof NewsSearchBodySchema>;
       console.log(`[google-service] /search/news query="${body.query}" num=${body.num ?? 10}`);
       const results = await searchNews(body, apiKey);
       console.log(`[google-service] /search/news returned ${results.length} results`);
+
+      reportCosts(req, 1, keySource === "app" ? "platform" : "org");
+
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/news error:`, err);
-      const msg = (err as Error).message;
-      res.status(502).json({ error: msg });
+      const error = err as Error & { statusCode?: number };
+      res.status(error.statusCode ?? 502).json({ error: error.message });
     }
   }
 );
@@ -68,25 +124,35 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       console.log(`[google-service] /search/batch resolving Serper key orgId=${req.orgId}`);
-      const apiKey = await resolveSerperKey(req);
+      const { key: apiKey, keySource } = await resolveSerperKey(req);
       const body = req.validatedBody as z.infer<typeof BatchSearchBodySchema>;
-      console.log(`[google-service] /search/batch ${body.queries.length} queries`);
+      const queryCount = body.queries.length;
+
+      if (keySource === "app") {
+        await authorizeBilling(req, queryCount, `serper-batch-search x${queryCount}`);
+      }
+
+      console.log(`[google-service] /search/batch ${queryCount} queries`);
       const results = await Promise.all(
         body.queries.map(async ({ query, type, num, gl, hl }, i) => {
-          console.log(`[google-service] /search/batch [${i + 1}/${body.queries.length}] type=${type} query="${query}"`);
+          console.log(`[google-service] /search/batch [${i + 1}/${queryCount}] type=${type} query="${query}"`);
           const searchResults =
             type === "web"
               ? await searchWeb({ query, num, gl, hl }, apiKey)
               : await searchNews({ query, num, gl, hl }, apiKey);
-          console.log(`[google-service] /search/batch [${i + 1}/${body.queries.length}] returned ${searchResults.length} results`);
+          console.log(`[google-service] /search/batch [${i + 1}/${queryCount}] returned ${searchResults.length} results`);
           return { query, type, results: searchResults };
         })
       );
       console.log(`[google-service] /search/batch completed all ${results.length} queries`);
+
+      reportCosts(req, queryCount, keySource === "app" ? "platform" : "org");
+
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/batch error:`, err);
-      res.status(502).json({ error: (err as Error).message });
+      const error = err as Error & { statusCode?: number };
+      res.status(error.statusCode ?? 502).json({ error: error.message });
     }
   }
 );
