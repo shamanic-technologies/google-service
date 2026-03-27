@@ -253,7 +253,7 @@ describe("Run closing on response finish", () => {
 
     // Wait for async finish handler
     await new Promise((r) => setTimeout(r, 50));
-    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID);
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, undefined);
   });
 
   it("closes run as failed on error response", async () => {
@@ -263,7 +263,28 @@ describe("Run closing on response finish", () => {
     expect(res.status).toBe(500);
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "failed", TEST_ORG_ID, TEST_USER_ID);
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "failed", TEST_ORG_ID, TEST_USER_ID, undefined);
+  });
+
+  it("forwards featureSlug to updateRun when header is present", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: "uuid-1",
+        org_id: TEST_ORG_ID,
+        user_id: TEST_USER_ID,
+        account_id: "111",
+        mcc_id: "1234567890",
+        created_at: new Date("2024-01-01"),
+      }],
+    });
+
+    const res = await request(app)
+      .get("/accounts")
+      .set({ ...idHeaders, "x-feature-slug": "my-feature" });
+    expect(res.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, "my-feature");
   });
 });
 
@@ -758,7 +779,8 @@ describe("POST /search/web", () => {
       TEST_CHILD_RUN_ID,
       [{ costName: "serper-dev-search-query", quantity: 1, costSource: "platform" }],
       TEST_ORG_ID,
-      TEST_USER_ID
+      TEST_USER_ID,
+      undefined
     );
   });
 
@@ -776,7 +798,8 @@ describe("POST /search/web", () => {
       TEST_CHILD_RUN_ID,
       [{ costName: "serper-dev-search-query", quantity: 1, costSource: "org" }],
       TEST_ORG_ID,
-      TEST_USER_ID
+      TEST_USER_ID,
+      undefined
     );
   });
 
@@ -986,7 +1009,8 @@ describe("POST /search/batch", () => {
       TEST_CHILD_RUN_ID,
       [{ costName: "serper-dev-search-query", quantity: 3, costSource: "platform" }],
       TEST_ORG_ID,
-      TEST_USER_ID
+      TEST_USER_ID,
+      undefined
     );
   });
 
