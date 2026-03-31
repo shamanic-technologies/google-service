@@ -20,10 +20,12 @@ export const requireIdentityHeaders = (req: Request, res: Response, next: NextFu
   }
 
   const featureSlug = req.headers["x-feature-slug"];
+  const brandId = req.headers["x-brand-id"];
 
   req.orgId = orgId;
   req.userId = userId;
   req.featureSlug = typeof featureSlug === "string" ? featureSlug : undefined;
+  req.brandId = typeof brandId === "string" ? brandId : undefined;
   next();
 };
 
@@ -73,6 +75,7 @@ declare global {
       userId?: string;
       runId?: string;
       featureSlug?: string;
+      brandId?: string;
     }
   }
 }

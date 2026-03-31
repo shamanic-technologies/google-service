@@ -28,7 +28,7 @@ router.get(
       const callbackUri =
         redirectUri || `${req.protocol}://${req.get("host")}/auth/callback`;
 
-      const creds = await getGoogleCredentials({ method: req.method, path: req.route.path }, req.runId, req.featureSlug);
+      const creds = await getGoogleCredentials({ method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
 
       await query(
         `INSERT INTO oauth_states (state, org_id, user_id, redirect_uri, feature_slug) VALUES ($1, $2, $3, $4, $5)`,
@@ -77,7 +77,7 @@ router.get(
 
       await query(`DELETE FROM oauth_states WHERE state = $1`, [state]);
 
-      const creds = await getGoogleCredentials({ method: req.method, path: req.route.path }, req.runId, req.featureSlug);
+      const creds = await getGoogleCredentials({ method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
       const tokens = await exchangeCodeForTokens(code, redirectUri, creds);
 
       const client = createGoogleAdsClient(creds);
@@ -89,7 +89,7 @@ router.get(
       }
 
       for (const account of accounts) {
-        await storeRefreshToken(orgId, account.id, tokens.refresh_token, req.runId, req.featureSlug);
+        await storeRefreshToken(orgId, account.id, tokens.refresh_token, req.runId, req.featureSlug, req.brandId);
 
         await query(
           `INSERT INTO accounts (org_id, user_id, account_id, refresh_token_provider, mcc_id)

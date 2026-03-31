@@ -15,6 +15,7 @@ export const createRequestRun = async (
       userId: req.userId!,
       service: "google",
       featureSlug: req.featureSlug,
+      brandId: req.brandId,
     });
 
     req.runId = runId;
@@ -22,7 +23,7 @@ export const createRequestRun = async (
 
     res.on("finish", () => {
       const status = res.statusCode < 400 ? "completed" : "failed";
-      updateRun(runId, status, req.orgId!, req.userId!, req.featureSlug).catch((err) => {
+      updateRun(runId, status, req.orgId!, req.userId!, req.featureSlug, req.brandId).catch((err) => {
         console.error(`[google-service] Failed to close run ${runId} as ${status}:`, err);
       });
     });
