@@ -106,10 +106,10 @@ import { createApp } from "../app";
 
 const app = createApp();
 
-const TEST_ORG_ID = "org-uuid-123";
-const TEST_USER_ID = "user-uuid-456";
-const TEST_PARENT_RUN_ID = "parent-run-uuid-789";
-const TEST_CHILD_RUN_ID = "child-run-uuid-012";
+const TEST_ORG_ID = "00000000-0000-4000-a000-000000000001";
+const TEST_USER_ID = "00000000-0000-4000-a000-000000000002";
+const TEST_PARENT_RUN_ID = "00000000-0000-4000-a000-000000000003";
+const TEST_CHILD_RUN_ID = "00000000-0000-4000-a000-000000000004";
 
 const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID, "x-run-id": TEST_PARENT_RUN_ID };
 
@@ -170,6 +170,36 @@ describe("Identity headers middleware", () => {
       .set("x-user-id", TEST_USER_ID);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("x-run-id");
+  });
+
+  it("returns 400 when x-org-id is not a valid UUID", async () => {
+    const res = await request(app)
+      .get("/auth/url")
+      .set("x-org-id", "platform")
+      .set("x-user-id", TEST_USER_ID)
+      .set("x-run-id", TEST_PARENT_RUN_ID);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("x-org-id must be a valid UUID");
+  });
+
+  it("returns 400 when x-user-id is not a valid UUID", async () => {
+    const res = await request(app)
+      .get("/auth/url")
+      .set("x-org-id", TEST_ORG_ID)
+      .set("x-user-id", "not-a-uuid")
+      .set("x-run-id", TEST_PARENT_RUN_ID);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("x-user-id must be a valid UUID");
+  });
+
+  it("returns 400 when x-run-id is not a valid UUID", async () => {
+    const res = await request(app)
+      .get("/auth/url")
+      .set("x-org-id", TEST_ORG_ID)
+      .set("x-user-id", TEST_USER_ID)
+      .set("x-run-id", "bad-run-id");
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("x-run-id must be a valid UUID");
   });
 });
 

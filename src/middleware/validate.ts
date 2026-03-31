@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { z, ZodSchema } from "zod";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const requireIdentityHeaders = (req: Request, res: Response, next: NextFunction): void => {
   const orgId = req.headers["x-org-id"];
   const userId = req.headers["x-user-id"];
@@ -10,12 +12,24 @@ export const requireIdentityHeaders = (req: Request, res: Response, next: NextFu
     res.status(400).json({ error: "Missing required header: x-org-id" });
     return;
   }
+  if (!UUID_RE.test(orgId)) {
+    res.status(400).json({ error: "x-org-id must be a valid UUID" });
+    return;
+  }
   if (!userId || typeof userId !== "string") {
     res.status(400).json({ error: "Missing required header: x-user-id" });
     return;
   }
+  if (!UUID_RE.test(userId)) {
+    res.status(400).json({ error: "x-user-id must be a valid UUID" });
+    return;
+  }
   if (!runId || typeof runId !== "string") {
     res.status(400).json({ error: "Missing required header: x-run-id" });
+    return;
+  }
+  if (!UUID_RE.test(runId)) {
+    res.status(400).json({ error: "x-run-id must be a valid UUID" });
     return;
   }
 
