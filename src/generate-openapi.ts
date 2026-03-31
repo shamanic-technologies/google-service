@@ -83,6 +83,14 @@ const spec = {
         schema: { type: "string" },
         description: "Feature slug for tracking which feature triggered the request",
       },
+      BrandId: {
+        name: "x-brand-id",
+        in: "header",
+        required: false,
+        schema: { type: "string" },
+        description: "Comma-separated list of brand UUIDs (e.g. \"uuid1,uuid2,uuid3\"). Forwarded to all downstream service calls.",
+        example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      },
     },
   },
   paths: {
@@ -109,6 +117,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "redirectUri", in: "query", required: false, schema: { type: "string" } },
         ],
         responses: {
@@ -139,6 +148,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "code", in: "query", required: true, schema: { type: "string" } },
           { name: "state", in: "query", required: true, schema: { type: "string" } },
         ],
@@ -170,6 +180,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
         ],
         responses: {
           "200": {
@@ -191,6 +202,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           {
             name: "status",
@@ -217,6 +229,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         requestBody: {
@@ -246,6 +259,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -275,6 +289,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -306,6 +321,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
           {
@@ -341,6 +357,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
           { name: "campaignId", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -371,6 +388,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
           { name: "accountId", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: {
@@ -395,6 +413,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
         ],
         requestBody: {
           required: true,
@@ -442,6 +461,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
         ],
         requestBody: {
           required: true,
@@ -489,6 +509,7 @@ const spec = {
           { $ref: "#/components/parameters/UserId" },
           { $ref: "#/components/parameters/RunId" },
           { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
         ],
         requestBody: {
           required: true,

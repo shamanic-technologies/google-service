@@ -11,6 +11,7 @@ export interface CreateRunParams {
   userId: string;
   service: string;
   featureSlug?: string;
+  brandId?: string;
 }
 
 export interface CostItem {
@@ -28,6 +29,7 @@ export const createRun = async (params: CreateRunParams): Promise<string> => {
       "x-user-id": params.userId,
       ...(params.parentRunId ? { "x-run-id": params.parentRunId } : {}),
       ...(params.featureSlug ? { "x-feature-slug": params.featureSlug } : {}),
+      ...(params.brandId ? { "x-brand-id": params.brandId } : {}),
     },
     body: JSON.stringify({
       serviceName: params.service,
@@ -50,7 +52,8 @@ export const updateRun = async (
   status: "completed" | "failed",
   orgId: string,
   userId: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<void> => {
   const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/runs/${runId}`, {
     method: "PATCH",
@@ -60,6 +63,7 @@ export const updateRun = async (
       "x-user-id": userId,
       "x-run-id": runId,
       ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
+      ...(brandId ? { "x-brand-id": brandId } : {}),
     },
     body: JSON.stringify({ status }),
   });
@@ -76,7 +80,8 @@ export const addCosts = async (
   items: CostItem[],
   orgId: string,
   userId: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<void> => {
   const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/runs/${runId}/costs`, {
     method: "POST",
@@ -86,6 +91,7 @@ export const addCosts = async (
       "x-user-id": userId,
       "x-run-id": runId,
       ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
+      ...(brandId ? { "x-brand-id": brandId } : {}),
     },
     body: JSON.stringify({ items }),
   });

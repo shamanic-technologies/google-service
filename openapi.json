@@ -1218,6 +1218,16 @@
           "type": "string"
         },
         "description": "Feature slug for tracking which feature triggered the request"
+      },
+      "BrandId": {
+        "name": "x-brand-id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated list of brand UUIDs (e.g. \"uuid1,uuid2,uuid3\"). Forwarded to all downstream service calls.",
+        "example": "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
       }
     }
   },
@@ -1254,6 +1264,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           },
           {
             "name": "redirectUri",
@@ -1303,6 +1316,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           },
           {
             "name": "code",
@@ -1360,6 +1376,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           }
         ],
         "responses": {
@@ -1391,6 +1410,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           },
           {
             "name": "accountId",
@@ -1443,6 +1465,9 @@
             "$ref": "#/components/parameters/FeatureSlug"
           },
           {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -1489,6 +1514,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           },
           {
             "name": "accountId",
@@ -1546,6 +1574,9 @@
             "$ref": "#/components/parameters/FeatureSlug"
           },
           {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -1600,6 +1631,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           },
           {
             "name": "accountId",
@@ -1667,6 +1701,9 @@
             "$ref": "#/components/parameters/FeatureSlug"
           },
           {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -1723,6 +1760,9 @@
             "$ref": "#/components/parameters/FeatureSlug"
           },
           {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
             "name": "accountId",
             "in": "path",
             "required": true,
@@ -1761,6 +1801,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           }
         ],
         "requestBody": {
@@ -1823,6 +1866,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           }
         ],
         "requestBody": {
@@ -1885,6 +1931,9 @@
           },
           {
             "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
           }
         ],
         "requestBody": {

@@ -17,7 +17,8 @@ export const authorizeCredits = async (
   orgId: string,
   userId: string,
   runId?: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<AuthorizeCreditsResult> => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -28,6 +29,7 @@ export const authorizeCredits = async (
 
   if (runId) headers["x-run-id"] = runId;
   if (featureSlug) headers["x-feature-slug"] = featureSlug;
+  if (brandId) headers["x-brand-id"] = brandId;
 
   const res = await fetch(`${env.BILLING_SERVICE_URL}/v1/credits/authorize`, {
     method: "POST",

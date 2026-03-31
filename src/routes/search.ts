@@ -21,7 +21,8 @@ const resolveSerperKey = async (req: Request): Promise<SerperKeyResult> => {
     req.userId!,
     { method: req.method, path: req.route?.path ?? req.path },
     req.runId,
-    req.featureSlug
+    req.featureSlug,
+    req.brandId
   );
 };
 
@@ -36,7 +37,8 @@ const authorizeBilling = async (
     req.orgId!,
     req.userId!,
     req.runId,
-    req.featureSlug
+    req.featureSlug,
+    req.brandId
   );
   if (!result.sufficient) {
     throw Object.assign(
@@ -57,7 +59,8 @@ const reportCosts = (
     [{ costName: SERPER_COST_NAME, quantity, costSource }],
     req.orgId!,
     req.userId!,
-    req.featureSlug
+    req.featureSlug,
+    req.brandId
   ).catch((err) => {
     console.error(`[google-service] Failed to report costs for run ${req.runId}:`, err);
   });

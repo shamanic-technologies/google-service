@@ -14,7 +14,8 @@ export const getPlatformKey = async (
   provider: string,
   caller: CallerContext,
   runId?: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<string> => {
   console.log(`[google-service] Resolving platform key: provider=${provider}`);
   const res = await fetch(
@@ -27,6 +28,7 @@ export const getPlatformKey = async (
         "X-Caller-Path": caller.path,
         ...(runId ? { "x-run-id": runId } : {}),
         ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
+        ...(brandId ? { "x-brand-id": brandId } : {}),
       },
     }
   );
@@ -48,13 +50,14 @@ export interface GoogleCredentials {
 export const getGoogleCredentials = async (
   caller: CallerContext,
   runId?: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<GoogleCredentials> => {
   const [clientId, clientSecret, developerToken, mccAccountId] = await Promise.all([
-    getPlatformKey("google-client-id", caller, runId, featureSlug),
-    getPlatformKey("google-client-secret", caller, runId, featureSlug),
-    getPlatformKey("google-developer-token", caller, runId, featureSlug),
-    getPlatformKey("google-mcc-account-id", caller, runId, featureSlug),
+    getPlatformKey("google-client-id", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-client-secret", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-developer-token", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-mcc-account-id", caller, runId, featureSlug, brandId),
   ]);
   return { clientId, clientSecret, developerToken, mccAccountId };
 };
@@ -64,7 +67,8 @@ export const storeRefreshToken = async (
   accountId: string,
   refreshToken: string,
   runId?: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<void> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(`${env.KEY_SERVICE_URL}/internal/keys`, {
@@ -73,6 +77,7 @@ export const storeRefreshToken = async (
       ...headers(),
       ...(runId ? { "x-run-id": runId } : {}),
       ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
+      ...(brandId ? { "x-brand-id": brandId } : {}),
     },
     body: JSON.stringify({ orgId, provider, apiKey: refreshToken }),
   });
@@ -87,7 +92,8 @@ export const getRefreshToken = async (
   accountId: string,
   caller: CallerContext,
   runId?: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<string> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(
@@ -102,6 +108,7 @@ export const getRefreshToken = async (
         "X-Caller-Path": caller.path,
         ...(runId ? { "x-run-id": runId } : {}),
         ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
+        ...(brandId ? { "x-brand-id": brandId } : {}),
       },
     }
   );
@@ -122,7 +129,8 @@ export const getSerperApiKey = async (
   userId: string,
   caller: CallerContext,
   runId?: string,
-  featureSlug?: string
+  featureSlug?: string,
+  brandId?: string
 ): Promise<SerperKeyResult> => {
   const provider = "serper-dev";
   console.log(`[google-service] Resolving Serper key via auto-resolve: orgId=${orgId}`);
@@ -138,6 +146,7 @@ export const getSerperApiKey = async (
         "X-Caller-Path": caller.path,
         ...(runId ? { "x-run-id": runId } : {}),
         ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
+        ...(brandId ? { "x-brand-id": brandId } : {}),
       },
     }
   );
