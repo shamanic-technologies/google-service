@@ -1203,3 +1203,65 @@ describe("GET /openapi.json", () => {
     expect([200, 404]).toContain(res.status);
   });
 });
+
+// ─── Scanner/bot request logging suppression ───
+
+describe("vulnerability scanner requests", () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  const scannerPaths = [
+    "/.env",
+    "/.env.backup",
+    "/.env.bak",
+    "/.env.old",
+    "/.env.example",
+    "/.env.save",
+    "/core/.env",
+    "/api/.env",
+    "/backend/.env",
+    "/.git/config",
+    "/actuator/env",
+    "/debug/default/view",
+    "/wp-admin",
+    "/wp-login.php",
+    "/wp-content/uploads",
+    "/phpinfo.php",
+    "/phpmyadmin",
+    "/cgi-bin/test",
+    "/config/.env",
+    "/.vercel/.env.production.local",
+  ];
+
+  it.each(scannerPaths)("does NOT log scanner request to %s", async (path) => {
+    consoleSpy.mockClear();
+    await request(app).get(path);
+
+    const logCalls = consoleSpy.mock.calls
+      .map((args) => args.join(" "))
+      .filter((msg) => msg.includes(`→ GET ${path}`));
+
+    expect(logCalls).toHaveLength(0);
+  });
+
+  it("still logs legitimate API requests", async () => {
+    consoleSpy.mockClear();
+    await request(app).get("/health");
+
+    const logCalls = consoleSpy.mock.calls
+      .map((args) => args.join(" "))
+      .filter((msg) => msg.includes("→ GET /health"));
+
+    expect(logCalls).toHaveLength(1);
+  });
+});
