@@ -1216,7 +1216,7 @@ describe("POST /internal/transfer-brand", () => {
   it("returns 401 without x-api-key", async () => {
     const res = await request(app)
       .post("/internal/transfer-brand")
-      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+      .send({ sourceBrandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
     expect(res.status).toBe(401);
     expect(res.body.error).toContain("API key");
   });
@@ -1225,7 +1225,7 @@ describe("POST /internal/transfer-brand", () => {
     const res = await request(app)
       .post("/internal/transfer-brand")
       .set("x-api-key", "wrong-key")
-      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+      .send({ sourceBrandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
     expect(res.status).toBe(401);
   });
 
@@ -1233,7 +1233,7 @@ describe("POST /internal/transfer-brand", () => {
     const res = await request(app)
       .post("/internal/transfer-brand")
       .set("x-api-key", TEST_API_KEY)
-      .send({ brandId: TEST_BRAND });
+      .send({ sourceBrandId: TEST_BRAND });
     expect(res.status).toBe(400);
   });
 
@@ -1241,7 +1241,7 @@ describe("POST /internal/transfer-brand", () => {
     const res = await request(app)
       .post("/internal/transfer-brand")
       .set("x-api-key", TEST_API_KEY)
-      .send({ brandId: "not-a-uuid", sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+      .send({ sourceBrandId: "not-a-uuid", sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
     expect(res.status).toBe(400);
   });
 
@@ -1249,7 +1249,17 @@ describe("POST /internal/transfer-brand", () => {
     const res = await request(app)
       .post("/internal/transfer-brand")
       .set("x-api-key", TEST_API_KEY)
-      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+      .send({ sourceBrandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+    expect(res.status).toBe(200);
+    expect(res.body.updatedTables).toEqual([]);
+  });
+
+  it("returns 200 with optional targetBrandId (still no-op)", async () => {
+    const TARGET_BRAND = "00000000-0000-4000-a000-000000000099";
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .set("x-api-key", TEST_API_KEY)
+      .send({ sourceBrandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG, targetBrandId: TARGET_BRAND });
     expect(res.status).toBe(200);
     expect(res.body.updatedTables).toEqual([]);
   });
@@ -1258,7 +1268,7 @@ describe("POST /internal/transfer-brand", () => {
     const res = await request(app)
       .post("/internal/transfer-brand")
       .set("x-api-key", TEST_API_KEY)
-      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+      .send({ sourceBrandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
     expect(res.status).toBe(200);
     expect(mockCreateRun).not.toHaveBeenCalled();
   });
