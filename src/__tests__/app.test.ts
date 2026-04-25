@@ -52,6 +52,7 @@ vi.mock("../env", () => ({
   env: {
     PORT: 8080,
     GOOGLE_SERVICE_DATABASE_URL: "postgresql://test:test@localhost:5432/test",
+    GOOGLE_SERVICE_API_KEY: "test-google-service-key",
     KEY_SERVICE_URL: "http://localhost:3001",
     KEY_SERVICE_API_KEY: "test-key-service-key",
     RUNS_SERVICE_URL: "http://localhost:3002",
@@ -1201,6 +1202,65 @@ describe("GET /openapi.json", () => {
   it("serves the OpenAPI spec or returns 404", async () => {
     const res = await request(app).get("/openapi.json");
     expect([200, 404]).toContain(res.status);
+  });
+});
+
+// ─── Internal: Transfer Brand ───
+
+const TEST_API_KEY = "test-google-service-key";
+const TEST_SOURCE_ORG = "00000000-0000-4000-a000-000000000010";
+const TEST_TARGET_ORG = "00000000-0000-4000-a000-000000000011";
+const TEST_BRAND = "00000000-0000-4000-a000-000000000012";
+
+describe("POST /internal/transfer-brand", () => {
+  it("returns 401 without x-api-key", async () => {
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("API key");
+  });
+
+  it("returns 401 with wrong x-api-key", async () => {
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .set("x-api-key", "wrong-key")
+      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 with missing body fields", async () => {
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .set("x-api-key", TEST_API_KEY)
+      .send({ brandId: TEST_BRAND });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 with invalid UUID", async () => {
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .set("x-api-key", TEST_API_KEY)
+      .send({ brandId: "not-a-uuid", sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 200 with empty updatedTables (no-op)", async () => {
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .set("x-api-key", TEST_API_KEY)
+      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+    expect(res.status).toBe(200);
+    expect(res.body.updatedTables).toEqual([]);
+  });
+
+  it("does not require identity headers (x-org-id, x-user-id, x-run-id)", async () => {
+    const res = await request(app)
+      .post("/internal/transfer-brand")
+      .set("x-api-key", TEST_API_KEY)
+      .send({ brandId: TEST_BRAND, sourceOrgId: TEST_SOURCE_ORG, targetOrgId: TEST_TARGET_ORG });
+    expect(res.status).toBe(200);
+    expect(mockCreateRun).not.toHaveBeenCalled();
   });
 });
 
