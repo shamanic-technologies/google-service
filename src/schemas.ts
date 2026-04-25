@@ -230,23 +230,6 @@ export const BatchSearchResponseSchema = z.object({
   results: z.array(BatchSearchResultItemSchema),
 });
 
-// ─── Internal: Transfer Brand ───
-
-export const TransferBrandBodySchema = z.object({
-  sourceBrandId: z.string().uuid(),
-  sourceOrgId: z.string().uuid(),
-  targetOrgId: z.string().uuid(),
-  targetBrandId: z.string().uuid().optional(),
-});
-
-export const TransferBrandResponseSchema = z.object({
-  updatedTables: z.array(
-    z.object({
-      tableName: z.string(),
-      count: z.number(),
-    })
-  ),
-});
 
 // ─── Error ───
 
