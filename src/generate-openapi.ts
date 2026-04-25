@@ -52,8 +52,6 @@ const spec = {
       BatchSearchBody: toSchema(schemas.BatchSearchBodySchema),
       BatchSearchResultItem: toSchema(schemas.BatchSearchResultItemSchema),
       BatchSearchResponse: toSchema(schemas.BatchSearchResponseSchema),
-      TransferBrandBody: toSchema(schemas.TransferBrandBodySchema),
-      TransferBrandResponse: toSchema(schemas.TransferBrandResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
     },
     parameters: {
@@ -96,40 +94,6 @@ const spec = {
     },
   },
   paths: {
-    "/internal/transfer-brand": {
-      post: {
-        summary: "Transfer brand between orgs (no-op for google-service)",
-        description:
-          "Called by brand-service during brand transfer orchestration. Google Ads accounts are org-level OAuth connections with no brand_id column, so this endpoint is a no-op that returns an empty updatedTables array.",
-        security: [{ serviceKeyAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/TransferBrandBody" },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Transfer results (always empty for google-service)",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/TransferBrandResponse" },
-              },
-            },
-          },
-          "401": {
-            description: "Invalid or missing API key",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
     "/health": {
       get: {
         summary: "Health check",

@@ -1,6 +1,5 @@
 import express from "express";
 import healthRoutes from "./routes/health";
-import internalRoutes from "./routes/internal";
 import authRoutes from "./routes/auth";
 import accountsRoutes from "./routes/accounts";
 import campaignsRoutes from "./routes/campaigns";
@@ -30,9 +29,6 @@ export const createApp = () => {
       res.status(404).json({ error: "OpenAPI spec not generated yet. Run npm run generate-openapi" });
     }
   });
-
-  // Internal routes (x-api-key auth only, no identity headers)
-  app.use(internalRoutes);
 
   // All routes below require x-org-id, x-user-id, and x-run-id headers
   app.use(requireIdentityHeaders);
