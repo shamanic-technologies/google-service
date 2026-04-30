@@ -9,6 +9,7 @@ import { searchWeb, searchNews } from "../services/serper";
 import { getSerperApiKey, SerperKeyResult } from "../services/key-service";
 import { authorizeCredits } from "../services/billing-client";
 import { addCosts } from "../services/runs-service";
+import { traceEvent } from "../lib/trace-event";
 import { z } from "zod";
 
 const router = Router();
@@ -72,6 +73,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       console.log(`[google-service] /search/web resolving Serper key orgId=${req.orgId}`);
+      traceEvent(req.runId!, { service: "google-service", event: "search-web-start", detail: `orgId=${req.orgId}` }, req.headers).catch(() => {});
       const { key: apiKey, keySource } = await resolveSerperKey(req);
 
       if (keySource === "app") {
@@ -85,10 +87,14 @@ router.post(
 
       reportCosts(req, 1, keySource === "app" ? "platform" : "org");
 
+      traceEvent(req.runId!, { service: "google-service", event: "search-web-done", detail: `resultCount=${results.length}, keySource=${keySource}` }, req.headers).catch(() => {});
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/web error:`, err);
       const error = err as Error & { statusCode?: number };
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "search-web-error", detail: error.message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(error.statusCode ?? 502).json({ error: error.message });
     }
   }
@@ -100,6 +106,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       console.log(`[google-service] /search/news resolving Serper key orgId=${req.orgId}`);
+      traceEvent(req.runId!, { service: "google-service", event: "search-news-start", detail: `orgId=${req.orgId}` }, req.headers).catch(() => {});
       const { key: apiKey, keySource } = await resolveSerperKey(req);
 
       if (keySource === "app") {
@@ -113,10 +120,14 @@ router.post(
 
       reportCosts(req, 1, keySource === "app" ? "platform" : "org");
 
+      traceEvent(req.runId!, { service: "google-service", event: "search-news-done", detail: `resultCount=${results.length}, keySource=${keySource}` }, req.headers).catch(() => {});
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/news error:`, err);
       const error = err as Error & { statusCode?: number };
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "search-news-error", detail: error.message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(error.statusCode ?? 502).json({ error: error.message });
     }
   }
@@ -136,6 +147,7 @@ router.post(
         await authorizeBilling(req, queryCount, "serper-dev-query");
       }
 
+      traceEvent(req.runId!, { service: "google-service", event: "search-batch-start", detail: `queryCount=${queryCount}, keySource=${keySource}` }, req.headers).catch(() => {});
       console.log(`[google-service] /search/batch ${queryCount} queries`);
       const results = await Promise.all(
         body.queries.map(async ({ query, type, num, gl, hl }, i) => {
@@ -152,10 +164,14 @@ router.post(
 
       reportCosts(req, queryCount, keySource === "app" ? "platform" : "org");
 
+      traceEvent(req.runId!, { service: "google-service", event: "search-batch-done", detail: `completed ${results.length} queries` }, req.headers).catch(() => {});
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/batch error:`, err);
       const error = err as Error & { statusCode?: number };
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "search-batch-error", detail: error.message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(error.statusCode ?? 502).json({ error: error.message });
     }
   }
