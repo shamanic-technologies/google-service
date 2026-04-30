@@ -8,6 +8,7 @@ import {
   listAccessibleAccounts,
 } from "../services/google-ads";
 import { validateQuery } from "../middleware/validate";
+import { traceEvent } from "../lib/trace-event";
 import { AuthUrlQuerySchema, AuthCallbackQuerySchema } from "../schemas";
 
 const router = Router();
@@ -24,6 +25,8 @@ router.get(
       const orgId = req.orgId!;
       const userId = req.userId!;
       const state = uuidv4();
+
+      traceEvent(req.runId!, { service: "google-service", event: "auth-url-start", detail: `orgId=${orgId}` }, req.headers).catch(() => {});
 
       const callbackUri =
         redirectUri || `${req.protocol}://${req.get("host")}/auth/callback`;
@@ -45,8 +48,12 @@ router.get(
         state,
       });
 
+      traceEvent(req.runId!, { service: "google-service", event: "auth-url-done", detail: `state=${state}` }, req.headers).catch(() => {});
       res.json({ url: `${GOOGLE_AUTH_URL}?${params.toString()}` });
     } catch (err) {
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "auth-url-error", detail: (err as Error).message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(500).json({ error: (err as Error).message });
     }
   }
@@ -61,6 +68,8 @@ router.get(
         code: string;
         state: string;
       };
+
+      traceEvent(req.runId!, { service: "google-service", event: "auth-callback-start", detail: `state=${state}` }, req.headers).catch(() => {});
 
       const stateResult = await query(
         `SELECT org_id, user_id, redirect_uri FROM oauth_states
@@ -100,12 +109,16 @@ router.get(
         );
       }
 
+      traceEvent(req.runId!, { service: "google-service", event: "auth-callback-done", detail: `linked ${accounts.length} account(s)` }, req.headers).catch(() => {});
       res.json({
         success: true,
         accountId: accounts[0].id,
         message: `Successfully linked ${accounts.length} account(s)`,
       });
     } catch (err) {
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "auth-callback-error", detail: (err as Error).message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(500).json({ error: (err as Error).message });
     }
   }

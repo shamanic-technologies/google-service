@@ -17,6 +17,7 @@ import {
   validateBody,
   validateParams,
 } from "../middleware/validate";
+import { traceEvent } from "../lib/trace-event";
 import {
   CampaignsQuerySchema,
   AccountIdParamSchema,
@@ -56,13 +57,18 @@ router.get(
       const { accountId } = req.validatedParams as { accountId: string };
       const { status } = req.validatedQuery as { status?: string };
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaigns-list-start", detail: `accountId=${accountId}, status=${status ?? "all"}` }, req.headers).catch(() => {});
       const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
       const campaigns = await listCampaigns(customer, status);
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaigns-list-done", detail: `accountId=${accountId}, count=${campaigns.length}` }, req.headers).catch(() => {});
       res.json({ campaigns });
     } catch (err) {
       const message = (err as Error).message;
       const statusCode = message === "Account not found" ? 404 : 500;
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "campaigns-list-error", detail: message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(statusCode).json({ error: message });
     }
   }
@@ -79,6 +85,7 @@ router.get(
         campaignId: string;
       };
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-detail-start", detail: `accountId=${accountId}, campaignId=${campaignId}` }, req.headers).catch(() => {});
       const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
       const campaign = await getCampaignDetail(customer, campaignId);
 
@@ -87,10 +94,14 @@ router.get(
         return;
       }
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-detail-done", detail: `campaignId=${campaignId}` }, req.headers).catch(() => {});
       res.json(campaign);
     } catch (err) {
       const message = (err as Error).message;
       const statusCode = message === "Account not found" ? 404 : 500;
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "campaign-detail-error", detail: message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(statusCode).json({ error: message });
     }
   }
@@ -167,9 +178,11 @@ router.post(
         endDate?: string;
       };
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-create-start", detail: `accountId=${accountId}, name=${body.name}` }, req.headers).catch(() => {});
       const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
       const campaign = await createCampaign(customer, body);
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-create-done", detail: `accountId=${accountId}, campaignId=${campaign.id}` }, req.headers).catch(() => {});
       res.status(201).json({
         campaign,
         message: "Campaign created successfully",
@@ -177,6 +190,9 @@ router.post(
     } catch (err) {
       const message = (err as Error).message;
       const statusCode = message === "Account not found" ? 404 : 500;
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "campaign-create-error", detail: message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(statusCode).json({ error: message });
     }
   }
@@ -200,9 +216,11 @@ router.patch(
         name?: string;
       };
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-update-start", detail: `accountId=${accountId}, campaignId=${campaignId}` }, req.headers).catch(() => {});
       const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
       const campaign = await updateCampaign(customer, campaignId, body);
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-update-done", detail: `campaignId=${campaignId}` }, req.headers).catch(() => {});
       res.json({
         campaign,
         message: "Campaign updated successfully",
@@ -210,6 +228,9 @@ router.patch(
     } catch (err) {
       const message = (err as Error).message;
       const statusCode = message === "Account not found" ? 404 : 500;
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "campaign-update-error", detail: message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(statusCode).json({ error: message });
     }
   }
@@ -228,9 +249,11 @@ router.post(
       };
       const body = req.validatedBody as { newName?: string };
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-duplicate-start", detail: `accountId=${accountId}, campaignId=${campaignId}` }, req.headers).catch(() => {});
       const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
       const campaign = await duplicateCampaign(customer, campaignId, body.newName);
 
+      traceEvent(req.runId!, { service: "google-service", event: "campaign-duplicate-done", detail: `newCampaignId=${campaign.id}` }, req.headers).catch(() => {});
       res.status(201).json({
         campaign,
         message: "Campaign duplicated successfully",
@@ -238,6 +261,9 @@ router.post(
     } catch (err) {
       const message = (err as Error).message;
       const statusCode = message === "Account not found" ? 404 : 500;
+      if (req.runId) {
+        traceEvent(req.runId, { service: "google-service", event: "campaign-duplicate-error", detail: message, level: "error" }, req.headers).catch(() => {});
+      }
       res.status(statusCode).json({ error: message });
     }
   }
