@@ -1,22 +1,32 @@
 import { createApp } from "./app";
 import { env } from "./env";
+import { instrument } from "./instrumentation";
 
-const app = createApp();
+const main = async () => {
+  await instrument();
 
-const server = app.listen(env.PORT, () => {
-  console.log(`[google-service] listening on port ${env.PORT}`);
-});
+  const app = createApp();
 
-process.on("unhandledRejection", (reason) => {
-  console.error("[google-service] Unhandled rejection:", reason);
-});
+  const server = app.listen(env.PORT, () => {
+    console.log(`[google-service] listening on port ${env.PORT}`);
+  });
 
-process.on("uncaughtException", (err) => {
-  console.error("[google-service] Uncaught exception:", err);
-  server.close(() => process.exit(1));
-});
+  process.on("unhandledRejection", (reason) => {
+    console.error("[google-service] Unhandled rejection:", reason);
+  });
 
-process.on("SIGTERM", () => {
-  console.log("[google-service] SIGTERM received, shutting down gracefully");
-  server.close(() => process.exit(0));
+  process.on("uncaughtException", (err) => {
+    console.error("[google-service] Uncaught exception:", err);
+    server.close(() => process.exit(1));
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("[google-service] SIGTERM received, shutting down gracefully");
+    server.close(() => process.exit(0));
+  });
+};
+
+main().catch((err) => {
+  console.error("[google-service] Fatal startup error:", err);
+  process.exit(1);
 });

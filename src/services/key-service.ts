@@ -119,6 +119,24 @@ export const getRefreshToken = async (
   return data.key;
 };
 
+export interface GoogleOAuthClient {
+  clientId: string;
+  clientSecret: string;
+}
+
+export const getGoogleOAuthClient = async (
+  caller: CallerContext,
+  runId?: string,
+  featureSlug?: string,
+  brandId?: string
+): Promise<GoogleOAuthClient> => {
+  const [clientId, clientSecret] = await Promise.all([
+    getPlatformKey("google-oauth-client-id", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-oauth-client-secret", caller, runId, featureSlug, brandId),
+  ]);
+  return { clientId, clientSecret };
+};
+
 export interface SerperKeyResult {
   key: string;
   keySource: "app" | "byok";
