@@ -52,6 +52,14 @@ const spec = {
       BatchSearchBody: toSchema(schemas.BatchSearchBodySchema),
       BatchSearchResultItem: toSchema(schemas.BatchSearchResultItemSchema),
       BatchSearchResponse: toSchema(schemas.BatchSearchResponseSchema),
+      GoogleAuthStartBody: toSchema(schemas.GoogleAuthStartBodySchema),
+      GoogleAuthStartResponse: toSchema(schemas.GoogleAuthStartResponseSchema),
+      GoogleAuthCallbackResponse: toSchema(schemas.GoogleAuthCallbackResponseSchema),
+      GoogleSyncResponse: toSchema(schemas.GoogleSyncResponseSchema),
+      GoogleMessageItem: toSchema(schemas.GoogleMessageItemSchema),
+      GoogleMessagesResponse: toSchema(schemas.GoogleMessagesResponseSchema),
+      GoogleContactItem: toSchema(schemas.GoogleContactItemSchema),
+      GoogleContactsResponse: toSchema(schemas.GoogleContactsResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
     },
     parameters: {
@@ -493,6 +501,148 @@ const spec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/auth/start": {
+      post: {
+        summary: "Start Google CRM OAuth (Gmail + People readonly)",
+        description:
+          "Generates a Google authorize URL with PKCE for the Gmail readonly + Contacts readonly scopes. Persists state + verifier in google_oauth_pending (10 minute TTL).",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/GoogleAuthStartBody" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Authorize URL",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleAuthStartResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/auth/callback": {
+      get: {
+        summary: "Google CRM OAuth callback (Gmail + People readonly)",
+        description:
+          "Exchanges code+PKCE for tokens, stores refresh token in google_oauth_tokens (one row per (org_id, google_account_email)).",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { name: "code", in: "query", required: true, schema: { type: "string" } },
+          { name: "state", in: "query", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Token stored",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleAuthCallbackResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid or expired state",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/sync": {
+      post: {
+        summary: "Sync Gmail messages + People contacts for all connected Google accounts of the org",
+        description:
+          "Backfill (last GOOGLE_GMAIL_BACKFILL_DAYS for Gmail; full People connections) on first sync, delta thereafter using Gmail historyId and People syncToken. Idempotent: re-runs produce no duplicate rows. Synchronous in v1.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+        ],
+        responses: {
+          "200": {
+            description: "Sync summary",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleSyncResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/messages": {
+      get: {
+        summary: "List raw Gmail messages (bronze) for the org",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200 } },
+          { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+          { name: "account_id", in: "query", required: false, schema: { type: "string", format: "uuid" } },
+          { name: "thread_id", in: "query", required: false, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Paginated raw Gmail messages",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleMessagesResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/contacts": {
+      get: {
+        summary: "List raw Google contacts (bronze) for the org",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200 } },
+          { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+          { name: "account_id", in: "query", required: false, schema: { type: "string", format: "uuid" } },
+          { name: "query", in: "query", required: false, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Paginated raw Google contacts",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleContactsResponse" },
               },
             },
           },
