@@ -46,10 +46,13 @@ describe("instrumentation", () => {
     expect(secretEntry.apiKey).toBe("client-secret-from-env");
   });
 
-  it("throws when GOOGLE_OAUTH_CLIENT_ID is missing", async () => {
+  it("skips registration silently when GOOGLE_OAUTH_CLIENT_ID is missing", async () => {
     delete process.env.GOOGLE_OAUTH_CLIENT_ID;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { instrument } = await import("../instrumentation");
-    await expect(instrument()).rejects.toThrow();
+    await expect(instrument()).resolves.toBeUndefined();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("skipping platform key registration"));
   });
 
   it("throws when key-service registration fails", async () => {

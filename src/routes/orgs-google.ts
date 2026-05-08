@@ -47,6 +47,13 @@ router.post(
       const userId = req.userId!;
       const body = req.validatedBody as { redirectUri?: string };
       const redirectUri = body.redirectUri ?? env.GOOGLE_OAUTH_REDIRECT_URI;
+      if (!redirectUri) {
+        res.status(500).json({
+          error:
+            "GOOGLE_OAUTH_REDIRECT_URI is not configured and no redirectUri was provided in the request body",
+        });
+        return;
+      }
 
       traceEvent(
         req.runId!,
