@@ -231,6 +231,86 @@ export const BatchSearchResponseSchema = z.object({
 });
 
 
+// ─── Google CRM (Gmail + People bronze) ───
+
+export const GoogleAuthStartBodySchema = z.object({
+  redirectUri: z.string().url().optional(),
+});
+
+export const GoogleAuthStartResponseSchema = z.object({
+  url: z.string().url(),
+  state: z.string(),
+});
+
+export const GoogleAuthCallbackQuerySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(1),
+});
+
+export const GoogleAuthCallbackResponseSchema = z.object({
+  success: z.boolean(),
+  googleAccountId: z.string().uuid(),
+  googleAccountEmail: z.string(),
+});
+
+export const GoogleSyncResponseSchema = z.object({
+  accounts: z.number().int(),
+  gmail: z.object({
+    inserted: z.number().int(),
+    updated: z.number().int(),
+    unchanged: z.number().int(),
+  }),
+  contacts: z.object({
+    inserted: z.number().int(),
+    updated: z.number().int(),
+    unchanged: z.number().int(),
+    deleted: z.number().int(),
+  }),
+});
+
+export const GoogleMessagesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  cursor: z.string().optional(),
+  account_id: z.string().uuid().optional(),
+  thread_id: z.string().optional(),
+});
+
+export const GoogleMessageItemSchema = z.object({
+  id: z.string().uuid(),
+  googleAccountId: z.string().uuid(),
+  gmailMessageId: z.string(),
+  threadId: z.string(),
+  historyId: z.string(),
+  payload: z.unknown(),
+  fetchedAt: z.string(),
+});
+
+export const GoogleMessagesResponseSchema = z.object({
+  items: z.array(GoogleMessageItemSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export const GoogleContactsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  cursor: z.string().optional(),
+  account_id: z.string().uuid().optional(),
+  query: z.string().optional(),
+});
+
+export const GoogleContactItemSchema = z.object({
+  id: z.string().uuid(),
+  googleAccountId: z.string().uuid(),
+  resourceName: z.string(),
+  etag: z.string().nullable(),
+  payload: z.unknown(),
+  fetchedAt: z.string(),
+});
+
+export const GoogleContactsResponseSchema = z.object({
+  items: z.array(GoogleContactItemSchema),
+  nextCursor: z.string().nullable(),
+});
+
 // ─── Error ───
 
 export const ErrorResponseSchema = z.object({

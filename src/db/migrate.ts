@@ -53,16 +53,80 @@ DO $$ BEGIN
     ALTER TABLE oauth_states ADD COLUMN feature_slug TEXT;
   END IF;
 END $$;
+
+-- ─── Google CRM bronze tables ───
+
+CREATE TABLE IF NOT EXISTS google_oauth_pending (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  state TEXT NOT NULL UNIQUE,
+  pkce_verifier TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  feature_slug TEXT,
+  brand_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes')
+);
+CREATE INDEX IF NOT EXISTS idx_google_oauth_pending_state ON google_oauth_pending(state);
+CREATE INDEX IF NOT EXISTS idx_google_oauth_pending_org_id ON google_oauth_pending(org_id);
+
+CREATE TABLE IF NOT EXISTS google_oauth_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  google_account_email TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  access_token TEXT,
+  access_token_expires_at TIMESTAMPTZ,
+  scopes TEXT NOT NULL,
+  gmail_history_id BIGINT,
+  people_sync_token TEXT,
+  feature_slug TEXT,
+  brand_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, google_account_email)
+);
+CREATE INDEX IF NOT EXISTS idx_google_oauth_tokens_org_id ON google_oauth_tokens(org_id);
+
+CREATE TABLE IF NOT EXISTS gmail_messages_raw (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  google_account_id UUID NOT NULL REFERENCES google_oauth_tokens(id) ON DELETE CASCADE,
+  gmail_message_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  history_id BIGINT NOT NULL,
+  payload JSONB NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, gmail_message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_org_id ON gmail_messages_raw(org_id);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_account ON gmail_messages_raw(google_account_id);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_thread ON gmail_messages_raw(thread_id);
+
+CREATE TABLE IF NOT EXISTS google_contacts_raw (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  google_account_id UUID NOT NULL REFERENCES google_oauth_tokens(id) ON DELETE CASCADE,
+  resource_name TEXT NOT NULL,
+  etag TEXT,
+  payload JSONB NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, resource_name)
+);
+CREATE INDEX IF NOT EXISTS idx_google_contacts_raw_org_id ON google_contacts_raw(org_id);
+CREATE INDEX IF NOT EXISTS idx_google_contacts_raw_account ON google_contacts_raw(google_account_id);
 `;
 
 async function migrate() {
-  console.log("Running migrations...");
+  console.log("[google-service] Running migrations...");
   await pool.query(migration);
-  console.log("Migrations complete.");
+  console.log("[google-service] Migrations complete.");
   await pool.end();
 }
 
 migrate().catch((err) => {
-  console.error("Migration failed:", err);
+  console.error("[google-service] Migration failed:", err);
   process.exit(1);
 });

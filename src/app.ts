@@ -4,6 +4,7 @@ import authRoutes from "./routes/auth";
 import accountsRoutes from "./routes/accounts";
 import campaignsRoutes from "./routes/campaigns";
 import searchRoutes from "./routes/search";
+import orgsGoogleRoutes from "./routes/orgs-google";
 import { errorHandler } from "./middleware/error-handler";
 import { requireIdentityHeaders } from "./middleware/validate";
 import { createRequestRun } from "./middleware/create-request-run";
@@ -37,6 +38,7 @@ export const createApp = () => {
   app.use(accountsRoutes);
   app.use(campaignsRoutes);
   app.use(searchRoutes);
+  app.use("/orgs/google", orgsGoogleRoutes);
 
   app.use(errorHandler);
 
