@@ -3,8 +3,8 @@ import { z } from "zod";
 const bootEnvSchema = z.object({
   KEY_SERVICE_URL: z.string().url(),
   KEY_SERVICE_API_KEY: z.string().min(1),
-  GOOGLE_OAUTH_CLIENT_ID: z.string().min(1),
-  GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
 });
 
 export const PROVIDER_CLIENT_ID = "google-oauth-client-id";
@@ -36,6 +36,13 @@ const registerPlatformKey = async (
 
 export const instrument = async (): Promise<void> => {
   const boot = bootEnvSchema.parse(process.env);
+
+  if (!boot.GOOGLE_OAUTH_CLIENT_ID || !boot.GOOGLE_OAUTH_CLIENT_SECRET) {
+    console.warn(
+      "[google-service] GOOGLE_OAUTH_CLIENT_ID/SECRET not set — skipping platform key registration. /orgs/google/* endpoints will fail until configured."
+    );
+    return;
+  }
 
   await Promise.all([
     registerPlatformKey(
