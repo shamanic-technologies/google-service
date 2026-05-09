@@ -131,8 +131,8 @@ export const getGoogleOAuthClient = async (
   brandId?: string
 ): Promise<GoogleOAuthClient> => {
   const [clientId, clientSecret] = await Promise.all([
-    getPlatformKey("google-oauth-client-id", caller, runId, featureSlug, brandId),
-    getPlatformKey("google-oauth-client-secret", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-client-id", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-client-secret", caller, runId, featureSlug, brandId),
   ]);
   return { clientId, clientSecret };
 };
