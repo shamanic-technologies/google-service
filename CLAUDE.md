@@ -24,7 +24,7 @@ See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Su
 
 Schema changes: edit the inline `migration` SQL in `src/db/migrate.ts`. Use `CREATE TABLE IF NOT EXISTS` / `DO $$ ... IF NOT EXISTS ... END $$` so the same migration runs cleanly on every boot.
 
-Manual one-off run still available via `pnpm migrate` (CLI guard via `require.main === module`).
+Manual one-off run still available via `pnpm migrate`, which runs `src/db/migrate-cli.ts`. The CLI runner lives in a **separate file** from `migrate.ts` because `esbuild --bundle --format=cjs` inlines every imported file into `dist/index.js`, and at runtime `require.main === module` evaluates **true** for the bundled entry — so a CLI guard inside `migrate.ts` would fire at boot and call `pool.end()` after migrations, crashing every subsequent request with `Cannot use a pool after calling end on the pool`. Reference: hotfix v0.19.1.
 
 ## Data layering
 
