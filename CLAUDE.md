@@ -18,6 +18,14 @@ See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Su
 
 **Do not read `GOOGLE_OAUTH_CLIENT_SECRET` from env anywhere else.** Business logic must call `getGoogleOAuthClient()` in `src/services/key-service.ts`, which decrypts via key-service at runtime.
 
+## Migrations
+
+`src/db/migrate.ts` exports `runMigrations()` which is awaited from `src/index.ts` **before** `app.listen()`. Every Railway deploy runs the migration; missing tables block startup so a bad migration triggers Railway's restart loop loudly instead of serving 500s.
+
+Schema changes: edit the inline `migration` SQL in `src/db/migrate.ts`. Use `CREATE TABLE IF NOT EXISTS` / `DO $$ ... IF NOT EXISTS ... END $$` so the same migration runs cleanly on every boot.
+
+Manual one-off run still available via `pnpm migrate` (CLI guard via `require.main === module`).
+
 ## Data layering
 
 This service owns **bronze** for Google CRM data. Silver/gold are out of scope (see triggers below).
