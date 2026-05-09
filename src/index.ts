@@ -1,8 +1,10 @@
 import { createApp } from "./app";
 import { env } from "./env";
 import { instrument } from "./instrumentation";
+import { runMigrations } from "./db/migrate";
 
 const main = async () => {
+  await runMigrations();
   await instrument();
 
   const app = createApp();

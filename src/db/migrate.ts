@@ -119,14 +119,17 @@ CREATE INDEX IF NOT EXISTS idx_google_contacts_raw_org_id ON google_contacts_raw
 CREATE INDEX IF NOT EXISTS idx_google_contacts_raw_account ON google_contacts_raw(google_account_id);
 `;
 
-async function migrate() {
+export const runMigrations = async (): Promise<void> => {
   console.log("[google-service] Running migrations...");
   await pool.query(migration);
   console.log("[google-service] Migrations complete.");
-  await pool.end();
-}
+};
 
-migrate().catch((err) => {
-  console.error("[google-service] Migration failed:", err);
-  process.exit(1);
-});
+if (require.main === module) {
+  runMigrations()
+    .then(() => pool.end())
+    .catch((err) => {
+      console.error("[google-service] Migration failed:", err);
+      process.exit(1);
+    });
+}
