@@ -2,13 +2,14 @@ import { Router, Request, Response, NextFunction } from "express";
 import { query } from "../db/client";
 import { env } from "../env";
 import { apiKeyAuth } from "../middleware/api-key-auth";
-import { validateBody, validateQuery } from "../middleware/validate";
+import { validateBody, validateParams, validateQuery } from "../middleware/validate";
 import { traceEvent } from "../lib/trace-event";
 import {
   GoogleAuthStartBodySchema,
   GoogleAuthCallbackQuerySchema,
   GoogleMessagesQuerySchema,
   GoogleContactsQuerySchema,
+  GoogleSyncJobIdParamSchema,
 } from "../schemas";
 import { getGoogleOAuthClient, type CallerContext } from "../services/key-service";
 import {
@@ -191,36 +192,144 @@ router.get(
   }
 );
 
-// ─── POST /orgs/google/sync ───
-
+// ─── POST /orgs/google/sync (async) ───
+//
+// Inserts a row in google_sync_jobs (status='running'), fires the actual ingest
+// in a detached promise, and returns 202 immediately with {jobId, status}.
+// Synchronous execution previously timed out the dashboard's Vercel proxy on
+// large mailboxes (FUNCTION_INVOCATION_TIMEOUT, 300s cap). Caller polls
+// GET /orgs/google/sync/:jobId until status != 'running'.
 router.post(
   "/sync",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = req.orgId!;
-      const accounts = await listOrgGoogleAccounts(orgId);
+      const userId = req.userId!;
 
-      const summary = {
-        accounts: accounts.length,
-        gmail: { inserted: 0, updated: 0, unchanged: 0 },
-        contacts: { inserted: 0, updated: 0, unchanged: 0, deleted: 0 },
-      };
+      const insertResult = await query(
+        `INSERT INTO google_sync_jobs (org_id, user_id, status)
+         VALUES ($1, $2, 'running')
+         RETURNING id`,
+        [orgId, userId]
+      );
+      const jobId = insertResult.rows[0].id as string;
 
-      for (const account of accounts) {
-        const [gmailResult, peopleResult] = await Promise.all([
-          ingestGmailForAccount(account, callerCtx(req), req.runId!, req.featureSlug, req.brandId),
-          ingestPeopleForAccount(account, callerCtx(req), req.runId!, req.featureSlug, req.brandId),
-        ]);
-        summary.gmail.inserted += gmailResult.inserted;
-        summary.gmail.updated += gmailResult.updated;
-        summary.gmail.unchanged += gmailResult.unchanged;
-        summary.contacts.inserted += peopleResult.inserted;
-        summary.contacts.updated += peopleResult.updated;
-        summary.contacts.unchanged += peopleResult.unchanged;
-        summary.contacts.deleted += peopleResult.deleted;
+      runSyncInBackground({
+        jobId,
+        orgId,
+        callerCtx: callerCtx(req),
+        runId: req.runId!,
+        featureSlug: req.featureSlug,
+        brandId: req.brandId,
+      });
+
+      res.status(202).json({ jobId, status: "running" });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+interface RunSyncArgs {
+  jobId: string;
+  orgId: string;
+  callerCtx: CallerContext;
+  runId: string;
+  featureSlug?: string;
+  brandId?: string;
+}
+
+const runSyncInBackground = (args: RunSyncArgs): void => {
+  void runSync(args).catch((err) => {
+    console.error(
+      `[google-service] runSync unexpected failure jobId=${args.jobId}: ${(err as Error).message}`
+    );
+  });
+};
+
+const runSync = async (args: RunSyncArgs): Promise<void> => {
+  const { jobId, orgId, callerCtx: ctx, runId, featureSlug, brandId } = args;
+  try {
+    const accounts = await listOrgGoogleAccounts(orgId);
+    const summary = {
+      accounts: accounts.length,
+      gmail: { inserted: 0, updated: 0, unchanged: 0 },
+      contacts: { inserted: 0, updated: 0, unchanged: 0, deleted: 0 },
+    };
+    for (const account of accounts) {
+      const [gmailResult, peopleResult] = await Promise.all([
+        ingestGmailForAccount(account, ctx, runId, featureSlug, brandId),
+        ingestPeopleForAccount(account, ctx, runId, featureSlug, brandId),
+      ]);
+      summary.gmail.inserted += gmailResult.inserted;
+      summary.gmail.updated += gmailResult.updated;
+      summary.gmail.unchanged += gmailResult.unchanged;
+      summary.contacts.inserted += peopleResult.inserted;
+      summary.contacts.updated += peopleResult.updated;
+      summary.contacts.unchanged += peopleResult.unchanged;
+      summary.contacts.deleted += peopleResult.deleted;
+    }
+    await query(
+      `UPDATE google_sync_jobs
+          SET status = 'succeeded', summary = $1, finished_at = NOW()
+          WHERE id = $2`,
+      [summary, jobId]
+    );
+  } catch (err) {
+    const message = (err as Error).message ?? String(err);
+    console.error(`[google-service] sync job ${jobId} failed: ${message}`);
+    await query(
+      `UPDATE google_sync_jobs
+          SET status = 'failed', error = $1, finished_at = NOW()
+          WHERE id = $2`,
+      [message, jobId]
+    ).catch((updateErr) => {
+      console.error(
+        `[google-service] failed to mark sync job ${jobId} as failed: ${(updateErr as Error).message}`
+      );
+    });
+  }
+};
+
+// ─── GET /orgs/google/sync/:jobId ───
+
+router.get(
+  "/sync/:jobId",
+  validateParams(GoogleSyncJobIdParamSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const { jobId } = req.validatedParams as { jobId: string };
+
+      const result = await query(
+        `SELECT id, status, summary, error, started_at, finished_at
+           FROM google_sync_jobs
+           WHERE org_id = $1 AND id = $2`,
+        [orgId, jobId]
+      );
+
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: "Sync job not found" });
+        return;
       }
 
-      res.json(summary);
+      const row = result.rows[0] as {
+        id: string;
+        status: "running" | "succeeded" | "failed";
+        summary: unknown;
+        error: string | null;
+        started_at: Date;
+        finished_at: Date | null;
+      };
+
+      res.json({
+        jobId: row.id,
+        status: row.status,
+        summary: row.summary ?? null,
+        error: row.error,
+        startedAt: row.started_at.toISOString(),
+        finishedAt: row.finished_at ? row.finished_at.toISOString() : null,
+      });
     } catch (err) {
       next(err);
     }

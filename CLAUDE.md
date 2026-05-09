@@ -38,8 +38,9 @@ This service owns **bronze** for Google CRM data. Silver/gold are out of scope (
 | `google_oauth_tokens` | `(org_id, google_account_email)` | OAuth callback | One row per (org, Gmail account). Stores refresh token, last access token, `gmail_history_id`, `people_sync_token` |
 | `gmail_messages_raw` | `(org_id, gmail_message_id)` | Gmail `messages.get format=full` | Full JSON payload in `payload jsonb` |
 | `google_contacts_raw` | `(org_id, resource_name)` | People `connections.list` | Full JSON payload in `payload jsonb` |
+| `google_sync_jobs` | `id` (UUID) | `POST /orgs/google/sync` | One row per sync request. `status` ∈ `running` \| `succeeded` \| `failed`; `summary` jsonb on success, `error` text on failure. Org-scoped lookups (`WHERE org_id = $1 AND id = $2`). |
 
-All bronze tables are `org_id`-scoped. Every SQL query in `/orgs/google/*` includes `WHERE org_id = $N`.
+All bronze tables (and `google_sync_jobs`) are `org_id`-scoped. Every SQL query in `/orgs/google/*` includes `WHERE org_id = $N`.
 
 ### Endpoints
 
@@ -47,7 +48,8 @@ All bronze tables are `org_id`-scoped. Every SQL query in `/orgs/google/*` inclu
 |--------|------|---------|
 | `POST` | `/orgs/google/auth/start` | Build authorize URL (PKCE), persist pending state |
 | `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens. Browser callback is proxied by the dashboard server-side so identity headers are present. |
-| `POST` | `/orgs/google/sync` | Backfill on first sync (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
+| `POST` | `/orgs/google/sync` | Start an async sync. Inserts a `google_sync_jobs` row, fires ingest in a detached promise, returns `202 {jobId, status:"running"}` immediately. Backfill on first run (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
+| `GET` | `/orgs/google/sync/{jobId}` | Poll job status. Returns `{jobId, status, summary, error, startedAt, finishedAt}`. Org-scoped: 404 if `jobId` belongs to another org. |
 | `GET` | `/orgs/google/messages` | Cursor-paginated raw Gmail messages |
 | `GET` | `/orgs/google/contacts` | Cursor-paginated raw Google contacts (text `query` matches `payload::text ILIKE`) |
 
@@ -60,11 +62,19 @@ Sync re-runs produce no duplicate rows because each bronze table has a `UNIQUE` 
 
 Append-only is preserved in spirit: we never mutate audit metadata; we only refresh `payload + fetched_at` when the upstream artefact changes.
 
-### Sync model: synchronous in v1
+### Sync model: fire-and-forget + status table
 
-The `/orgs/google/sync` endpoint runs synchronously inside the request. **Trade-off**: the request blocks until the full backfill or delta completes; on first sync against a busy mailbox this can exceed 30s.
+`POST /orgs/google/sync` is async. The handler:
 
-**Trigger to queue**: when the average sync exceeds 30s (or the p95 exceeds 60s), introduce a worker queue (BullMQ / pgmq) and have `/sync` enqueue a job + return `202 Accepted`. The response shape will need a `jobId` and a polling endpoint.
+1. Inserts a `google_sync_jobs` row with `status='running'`.
+2. Calls `runSyncInBackground({ jobId, orgId, ... })` which kicks off a detached promise (`void runSync(...).catch(...)`) — the HTTP handler does NOT await it.
+3. Returns `202 {jobId, status:"running"}` immediately.
+
+The detached promise updates the row to `succeeded` (with `summary` jsonb) or `failed` (with `error` text) once Gmail + People ingest finishes. Callers poll `GET /orgs/google/sync/{jobId}` until `status != 'running'`.
+
+**Why async** — the dashboard's Vercel proxy caps function invocations at 300 s (Pro plan). First-sync backfills against busy mailboxes blew past that and surfaced as `FUNCTION_INVOCATION_TIMEOUT sin1::...`. Returning 202 keeps the proxy round-trip well under the cap regardless of mailbox size.
+
+**Restart caveat (v1 trade-off)** — there is no queue and no worker. If the Railway service restarts mid-sync, the row stays `running` forever. Acceptable while sync is user-driven (the user can simply re-click sync); revisit when sync becomes scheduled or volume grows. The next iteration is `pgmq` with a reaper that flips long-stale `running` rows to `failed`.
 
 ### Future silver trigger
 

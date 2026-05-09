@@ -1217,7 +1217,7 @@
         ],
         "additionalProperties": false
       },
-      "GoogleSyncResponse": {
+      "GoogleSyncSummary": {
         "type": "object",
         "properties": {
           "accounts": {
@@ -1272,6 +1272,124 @@
           "accounts",
           "gmail",
           "contacts"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleSyncStartResponse": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "jobId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleSyncJobResponse": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "accounts": {
+                "type": "integer"
+              },
+              "gmail": {
+                "type": "object",
+                "properties": {
+                  "inserted": {
+                    "type": "integer"
+                  },
+                  "updated": {
+                    "type": "integer"
+                  },
+                  "unchanged": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "inserted",
+                  "updated",
+                  "unchanged"
+                ],
+                "additionalProperties": false
+              },
+              "contacts": {
+                "type": "object",
+                "properties": {
+                  "inserted": {
+                    "type": "integer"
+                  },
+                  "updated": {
+                    "type": "integer"
+                  },
+                  "unchanged": {
+                    "type": "integer"
+                  },
+                  "deleted": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "inserted",
+                  "updated",
+                  "unchanged",
+                  "deleted"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "accounts",
+              "gmail",
+              "contacts"
+            ],
+            "additionalProperties": false,
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "jobId",
+          "status",
+          "summary",
+          "error",
+          "startedAt",
+          "finishedAt"
         ],
         "additionalProperties": false
       },
@@ -2404,8 +2522,8 @@
     },
     "/orgs/google/sync": {
       "post": {
-        "summary": "Sync Gmail messages + People contacts for all connected Google accounts of the org",
-        "description": "Backfill (last GOOGLE_GMAIL_BACKFILL_DAYS for Gmail; full People connections) on first sync, delta thereafter using Gmail historyId and People syncToken. Idempotent: re-runs produce no duplicate rows. Synchronous in v1.",
+        "summary": "Start an async Gmail + People sync for all connected Google accounts of the org",
+        "description": "Backfill (last GOOGLE_GMAIL_BACKFILL_DAYS for Gmail; full People connections) on first sync, delta thereafter using Gmail historyId and People syncToken. Idempotent: re-runs produce no duplicate rows. Returns 202 immediately with a jobId; the caller must poll GET /orgs/google/sync/{jobId} until status != 'running'.",
         "parameters": [
           {
             "$ref": "#/components/parameters/OrgId"
@@ -2424,12 +2542,76 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Sync summary",
+          "202": {
+            "description": "Sync job accepted",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GoogleSyncResponse"
+                  "$ref": "#/components/schemas/GoogleSyncStartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/google/sync/{jobId}": {
+      "get": {
+        "summary": "Get the status of an async sync job",
+        "description": "Returns the current status (running | succeeded | failed) of a sync job. On success, summary is populated; on failure, error contains the error message. Lookup is org-scoped: jobs from other orgs return 404.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sync job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSyncJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid jobId (not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sync job not found for this org",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
