@@ -253,7 +253,7 @@ export const GoogleAuthCallbackResponseSchema = z.object({
   googleAccountEmail: z.string(),
 });
 
-export const GoogleSyncResponseSchema = z.object({
+export const GoogleSyncSummarySchema = z.object({
   accounts: z.number().int(),
   gmail: z.object({
     inserted: z.number().int(),
@@ -266,6 +266,26 @@ export const GoogleSyncResponseSchema = z.object({
     unchanged: z.number().int(),
     deleted: z.number().int(),
   }),
+});
+
+export const GoogleSyncJobStatusEnum = z.enum(["running", "succeeded", "failed"]);
+
+export const GoogleSyncStartResponseSchema = z.object({
+  jobId: z.string().uuid(),
+  status: GoogleSyncJobStatusEnum,
+});
+
+export const GoogleSyncJobIdParamSchema = z.object({
+  jobId: z.string().uuid(),
+});
+
+export const GoogleSyncJobResponseSchema = z.object({
+  jobId: z.string().uuid(),
+  status: GoogleSyncJobStatusEnum,
+  summary: GoogleSyncSummarySchema.nullable(),
+  error: z.string().nullable(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
 });
 
 export const GoogleMessagesQuerySchema = z.object({

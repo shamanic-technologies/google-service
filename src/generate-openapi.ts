@@ -55,7 +55,9 @@ const spec = {
       GoogleAuthStartBody: toSchema(schemas.GoogleAuthStartBodySchema),
       GoogleAuthStartResponse: toSchema(schemas.GoogleAuthStartResponseSchema),
       GoogleAuthCallbackResponse: toSchema(schemas.GoogleAuthCallbackResponseSchema),
-      GoogleSyncResponse: toSchema(schemas.GoogleSyncResponseSchema),
+      GoogleSyncSummary: toSchema(schemas.GoogleSyncSummarySchema),
+      GoogleSyncStartResponse: toSchema(schemas.GoogleSyncStartResponseSchema),
+      GoogleSyncJobResponse: toSchema(schemas.GoogleSyncJobResponseSchema),
       GoogleMessageItem: toSchema(schemas.GoogleMessageItemSchema),
       GoogleMessagesResponse: toSchema(schemas.GoogleMessagesResponseSchema),
       GoogleContactItem: toSchema(schemas.GoogleContactItemSchema),
@@ -601,9 +603,9 @@ const spec = {
     },
     "/orgs/google/sync": {
       post: {
-        summary: "Sync Gmail messages + People contacts for all connected Google accounts of the org",
+        summary: "Start an async Gmail + People sync for all connected Google accounts of the org",
         description:
-          "Backfill (last GOOGLE_GMAIL_BACKFILL_DAYS for Gmail; full People connections) on first sync, delta thereafter using Gmail historyId and People syncToken. Idempotent: re-runs produce no duplicate rows. Synchronous in v1.",
+          "Backfill (last GOOGLE_GMAIL_BACKFILL_DAYS for Gmail; full People connections) on first sync, delta thereafter using Gmail historyId and People syncToken. Idempotent: re-runs produce no duplicate rows. Returns 202 immediately with a jobId; the caller must poll GET /orgs/google/sync/{jobId} until status != 'running'.",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
@@ -612,11 +614,52 @@ const spec = {
           { $ref: "#/components/parameters/BrandId" },
         ],
         responses: {
-          "200": {
-            description: "Sync summary",
+          "202": {
+            description: "Sync job accepted",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/GoogleSyncResponse" },
+                schema: { $ref: "#/components/schemas/GoogleSyncStartResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/sync/{jobId}": {
+      get: {
+        summary: "Get the status of an async sync job",
+        description:
+          "Returns the current status (running | succeeded | failed) of a sync job. On success, summary is populated; on failure, error contains the error message. Lookup is org-scoped: jobs from other orgs return 404.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { name: "jobId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": {
+            description: "Sync job status",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleSyncJobResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid jobId (not a UUID)",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Sync job not found for this org",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
