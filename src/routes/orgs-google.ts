@@ -162,6 +162,35 @@ router.get(
   }
 );
 
+// ─── GET /orgs/google/accounts ───
+
+router.get(
+  "/accounts",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const result = await query(
+        `SELECT google_account_email, scopes, created_at
+           FROM google_oauth_tokens
+           WHERE org_id = $1
+           ORDER BY created_at ASC`,
+        [orgId]
+      );
+
+      const accounts = result.rows.map((row) => ({
+        email: row.google_account_email as string,
+        status: "active" as const,
+        scopes: (row.scopes as string).split(" ").filter((s) => s.length > 0),
+        connectedAt: (row.created_at as Date).toISOString(),
+      }));
+
+      res.json({ accounts });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // ─── POST /orgs/google/sync ───
 
 router.post(

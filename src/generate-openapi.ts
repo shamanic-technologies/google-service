@@ -60,6 +60,8 @@ const spec = {
       GoogleMessagesResponse: toSchema(schemas.GoogleMessagesResponseSchema),
       GoogleContactItem: toSchema(schemas.GoogleContactItemSchema),
       GoogleContactsResponse: toSchema(schemas.GoogleContactsResponseSchema),
+      GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
+      GoogleAccountsListResponse: toSchema(schemas.GoogleAccountsListResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
     },
     parameters: {
@@ -501,6 +503,30 @@ const spec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/accounts": {
+      get: {
+        summary: "List connected Google accounts for the org",
+        description:
+          "Returns the set of Google (Gmail) accounts the org has connected via OAuth. Sourced from google_oauth_tokens, scoped by x-org-id.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+        ],
+        responses: {
+          "200": {
+            description: "Connected Google accounts",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleAccountsListResponse" },
               },
             },
           },
