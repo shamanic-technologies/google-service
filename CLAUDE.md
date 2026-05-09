@@ -12,11 +12,11 @@ The client-service is the source of truth for identity resolution.
 
 See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Supertest, Railway).
 
-## Cold start (instrumentation.ts)
+## OAuth client credentials
 
-`src/instrumentation.ts` runs once at boot from `src/index.ts`. It reads `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` from the environment and registers them as platform keys via `POST /platform-keys` against key-service (providers `google-oauth-client-id`, `google-oauth-client-secret`).
+The Google OAuth client (Client ID + Secret) is the **same** for the Google Ads Developer Console and the Gmail/People consent flow — one Google Cloud project, one OAuth client. It is registered as platform keys `google-client-id` / `google-client-secret` by the dashboard (`apps/dashboard/src/instrumentation.ts`), not by this service.
 
-**Do not read `GOOGLE_OAUTH_CLIENT_SECRET` from env anywhere else.** Business logic must call `getGoogleOAuthClient()` in `src/services/key-service.ts`, which decrypts via key-service at runtime.
+Business logic must call `getGoogleOAuthClient()` in `src/services/key-service.ts` to fetch the OAuth client at runtime; never read `GOOGLE_*` env vars directly. If `getGoogleOAuthClient()` returns 404, the dashboard side has not yet registered the providers — fix it there, not here.
 
 ## Migrations
 
