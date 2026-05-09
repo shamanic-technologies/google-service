@@ -124,12 +124,3 @@ export const runMigrations = async (): Promise<void> => {
   await pool.query(migration);
   console.log("[google-service] Migrations complete.");
 };
-
-if (require.main === module) {
-  runMigrations()
-    .then(() => pool.end())
-    .catch((err) => {
-      console.error("[google-service] Migration failed:", err);
-      process.exit(1);
-    });
-}

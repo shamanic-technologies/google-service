@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "generate-openapi": "tsx src/generate-openapi.ts",
-    "migrate": "tsx src/db/migrate.ts"
+    "migrate": "tsx src/db/migrate-cli.ts"
   },
   "dependencies": {
     "express": "^4.21.0",
