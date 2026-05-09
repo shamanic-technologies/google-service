@@ -343,6 +343,59 @@ describe("GET /orgs/google/messages", () => {
   });
 });
 
+describe("GET /orgs/google/accounts", () => {
+  it("rejects missing x-org-id with 400", async () => {
+    const res = await request(app)
+      .get("/orgs/google/accounts")
+      .set({ "x-api-key": "test-google-service-key", "x-user-id": TEST_USER_ID, "x-run-id": TEST_RUN_ID });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("x-org-id");
+  });
+
+  it("returns empty list when org has no connected accounts", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const res = await request(app).get("/orgs/google/accounts").set(idHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ accounts: [] });
+  });
+
+  it("returns accounts with mapped fields, scoped to org_id", async () => {
+    const connectedAt = new Date("2026-05-01T12:00:00.000Z");
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          google_account_email: "alice@example.com",
+          scopes: "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/contacts.readonly",
+          created_at: connectedAt,
+        },
+        {
+          google_account_email: "bob@example.com",
+          scopes: "https://www.googleapis.com/auth/gmail.readonly",
+          created_at: new Date("2026-05-02T12:00:00.000Z"),
+        },
+      ],
+    });
+
+    const res = await request(app).get("/orgs/google/accounts").set(idHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body.accounts).toHaveLength(2);
+    expect(res.body.accounts[0]).toEqual({
+      email: "alice@example.com",
+      status: "active",
+      scopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/contacts.readonly",
+      ],
+      connectedAt: "2026-05-01T12:00:00.000Z",
+    });
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toContain("WHERE org_id = $1");
+    expect(params).toEqual([TEST_ORG_ID]);
+  });
+});
+
 describe("GET /orgs/google/contacts", () => {
   it("filters by query string via ILIKE on payload::text", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
