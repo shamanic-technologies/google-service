@@ -10,7 +10,7 @@ const envSchema = z.object({
   RUNS_SERVICE_API_KEY: z.string().min(1),
   BILLING_SERVICE_URL: z.string().url(),
   BILLING_SERVICE_API_KEY: z.string().min(1),
-  GOOGLE_OAUTH_REDIRECT_URI: z.string().url(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_GMAIL_BACKFILL_DAYS: z.coerce.number().int().min(1).default(365),
 });
 
