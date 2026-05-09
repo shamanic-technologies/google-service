@@ -267,36 +267,261 @@ describe("GET /orgs/google/auth/callback", () => {
   });
 });
 
-// ─── AC4 / AC5: sync ───
+// ─── Async sync: POST /sync + GET /sync/:jobId ───
 
-describe("POST /orgs/google/sync", () => {
-  it("returns zeros when no connected accounts", async () => {
-    mockListOrgGoogleAccounts.mockResolvedValueOnce([]);
+const TEST_JOB_ID = "00000000-0000-4000-a000-0000000000aa";
+const acct = (id: string) => ({
+  id,
+  orgId: TEST_ORG_ID,
+  userId: TEST_USER_ID,
+  googleAccountEmail: `${id}@x.com`,
+  refreshToken: "rt",
+  accessToken: null,
+  accessTokenExpiresAt: null,
+  scopes: "",
+  gmailHistoryId: null,
+  peopleSyncToken: null,
+});
+
+const isInsertJob = (sql: unknown) =>
+  typeof sql === "string" && sql.includes("INSERT INTO google_sync_jobs");
+const isUpdateJob = (sql: unknown) =>
+  typeof sql === "string" && sql.includes("UPDATE google_sync_jobs");
+const isSelectJob = (sql: unknown) =>
+  typeof sql === "string" &&
+  sql.includes("FROM google_sync_jobs") &&
+  sql.includes("SELECT");
+
+describe("POST /orgs/google/sync (async)", () => {
+  it("returns 202 with jobId immediately and status=running", async () => {
+    // INSERT google_sync_jobs returns the new row id
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (isInsertJob(sql)) return { rows: [{ id: TEST_JOB_ID }] };
+      if (isUpdateJob(sql)) return { rowCount: 1 };
+      return { rows: [] };
+    });
+    mockListOrgGoogleAccounts.mockResolvedValue([]);
 
     const res = await request(app).post("/orgs/google/sync").set(idHeaders).send({});
-    expect(res.status).toBe(200);
-    expect(res.body.accounts).toBe(0);
-    expect(res.body.gmail).toEqual({ inserted: 0, updated: 0, unchanged: 0 });
-    expect(res.body.contacts).toEqual({
-      inserted: 0,
-      updated: 0,
-      unchanged: 0,
-      deleted: 0,
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBe(TEST_JOB_ID);
+    expect(res.body.status).toBe("running");
+  });
+
+  it("response returns BEFORE background ingest finishes", async () => {
+    let releaseGmail!: () => void;
+    const gmailGate = new Promise<void>((resolve) => {
+      releaseGmail = resolve;
+    });
+
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (isInsertJob(sql)) return { rows: [{ id: TEST_JOB_ID }] };
+      if (isUpdateJob(sql)) return { rowCount: 1 };
+      return { rows: [] };
+    });
+    mockListOrgGoogleAccounts.mockResolvedValue([acct("a-1")]);
+    mockIngestGmail.mockImplementation(async () => {
+      await gmailGate;
+      return { inserted: 1, updated: 0, unchanged: 0 };
+    });
+    mockIngestPeople.mockResolvedValue({ inserted: 0, updated: 0, unchanged: 0, deleted: 0 });
+
+    const res = await request(app).post("/orgs/google/sync").set(idHeaders).send({});
+    expect(res.status).toBe(202);
+    // bg ingest still hung: no UPDATE call yet
+    const updateCallsBefore = mockQuery.mock.calls.filter((c) => isUpdateJob(c[0]));
+    expect(updateCallsBefore).toHaveLength(0);
+
+    releaseGmail();
+    // now wait for bg work to commit final UPDATE
+    await vi.waitFor(() => {
+      const updateCalls = mockQuery.mock.calls.filter((c) => isUpdateJob(c[0]));
+      expect(updateCalls.length).toBeGreaterThan(0);
     });
   });
 
-  it("aggregates gmail + people results across multiple accounts", async () => {
-    const acct = (id: string) => ({ id, orgId: TEST_ORG_ID, userId: TEST_USER_ID, googleAccountEmail: `${id}@x.com`, refreshToken: "rt", accessToken: null, accessTokenExpiresAt: null, scopes: "", gmailHistoryId: null, peopleSyncToken: null });
-    mockListOrgGoogleAccounts.mockResolvedValueOnce([acct("a-1"), acct("a-2")]);
+  it("background work updates job to succeeded with summary on success", async () => {
+    const updateCalls: { sql: string; params: unknown[] }[] = [];
+    mockQuery.mockImplementation(async (sql: string, params: unknown[]) => {
+      if (isInsertJob(sql)) return { rows: [{ id: TEST_JOB_ID }] };
+      if (isUpdateJob(sql)) {
+        updateCalls.push({ sql, params });
+        return { rowCount: 1 };
+      }
+      return { rows: [] };
+    });
+    mockListOrgGoogleAccounts.mockResolvedValue([acct("a-1"), acct("a-2")]);
     mockIngestGmail.mockResolvedValue({ inserted: 5, updated: 1, unchanged: 0 });
     mockIngestPeople.mockResolvedValue({ inserted: 3, updated: 0, unchanged: 0, deleted: 0 });
 
-    const res = await request(app).post("/orgs/google/sync").set(idHeaders).send({});
+    await request(app).post("/orgs/google/sync").set(idHeaders).send({});
+
+    await vi.waitFor(() => {
+      expect(updateCalls.length).toBeGreaterThan(0);
+    });
+    const last = updateCalls[updateCalls.length - 1];
+    expect(last.sql).toMatch(/status\s*=\s*'succeeded'/);
+    const summary = last.params.find(
+      (p) => typeof p === "object" && p !== null && "accounts" in (p as Record<string, unknown>)
+    ) as { accounts: number; gmail: { inserted: number }; contacts: { inserted: number } };
+    expect(summary).toBeTruthy();
+    expect(summary.accounts).toBe(2);
+    expect(summary.gmail.inserted).toBe(10);
+    expect(summary.contacts.inserted).toBe(6);
+    expect(last.params).toContain(TEST_JOB_ID);
+  });
+
+  it("background work updates job to failed with error on ingest throw", async () => {
+    const updateCalls: { sql: string; params: unknown[] }[] = [];
+    mockQuery.mockImplementation(async (sql: string, params: unknown[]) => {
+      if (isInsertJob(sql)) return { rows: [{ id: TEST_JOB_ID }] };
+      if (isUpdateJob(sql)) {
+        updateCalls.push({ sql, params });
+        return { rowCount: 1 };
+      }
+      return { rows: [] };
+    });
+    mockListOrgGoogleAccounts.mockResolvedValue([acct("a-1")]);
+    mockIngestGmail.mockRejectedValue(new Error("Gmail API 403"));
+    mockIngestPeople.mockResolvedValue({ inserted: 0, updated: 0, unchanged: 0, deleted: 0 });
+
+    await request(app).post("/orgs/google/sync").set(idHeaders).send({});
+
+    await vi.waitFor(() => {
+      expect(updateCalls.length).toBeGreaterThan(0);
+    });
+    const last = updateCalls[updateCalls.length - 1];
+    expect(last.sql).toMatch(/status\s*=\s*'failed'/);
+    expect(last.params.some((p) => typeof p === "string" && p.includes("Gmail API 403"))).toBe(true);
+    expect(last.params).toContain(TEST_JOB_ID);
+  });
+
+  it("concurrent POSTs return distinct jobIds", async () => {
+    const ids = ["00000000-0000-4000-a000-0000000000a1", "00000000-0000-4000-a000-0000000000a2"];
+    let i = 0;
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (isInsertJob(sql)) return { rows: [{ id: ids[i++] }] };
+      if (isUpdateJob(sql)) return { rowCount: 1 };
+      return { rows: [] };
+    });
+    mockListOrgGoogleAccounts.mockResolvedValue([]);
+
+    const [r1, r2] = await Promise.all([
+      request(app).post("/orgs/google/sync").set(idHeaders).send({}),
+      request(app).post("/orgs/google/sync").set(idHeaders).send({}),
+    ]);
+    expect(r1.status).toBe(202);
+    expect(r2.status).toBe(202);
+    expect(r1.body.jobId).not.toBe(r2.body.jobId);
+  });
+});
+
+describe("GET /orgs/google/sync/:jobId", () => {
+  it("returns 200 with status=succeeded and summary", async () => {
+    const summary = {
+      accounts: 1,
+      gmail: { inserted: 10, updated: 0, unchanged: 0 },
+      contacts: { inserted: 3, updated: 0, unchanged: 0, deleted: 0 },
+    };
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: TEST_JOB_ID,
+          status: "succeeded",
+          summary,
+          error: null,
+          started_at: new Date("2026-05-09T10:00:00Z"),
+          finished_at: new Date("2026-05-09T10:01:30Z"),
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .get(`/orgs/google/sync/${TEST_JOB_ID}`)
+      .set(idHeaders);
     expect(res.status).toBe(200);
-    expect(res.body.accounts).toBe(2);
-    expect(res.body.gmail.inserted).toBe(10);
-    expect(res.body.gmail.updated).toBe(2);
-    expect(res.body.contacts.inserted).toBe(6);
+    expect(res.body.jobId).toBe(TEST_JOB_ID);
+    expect(res.body.status).toBe("succeeded");
+    expect(res.body.summary).toEqual(summary);
+    expect(res.body.error).toBeNull();
+    expect(res.body.startedAt).toBe("2026-05-09T10:00:00.000Z");
+    expect(res.body.finishedAt).toBe("2026-05-09T10:01:30.000Z");
+  });
+
+  it("returns 200 with status=failed and error", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: TEST_JOB_ID,
+          status: "failed",
+          summary: null,
+          error: "Gmail API 403 SERVICE_DISABLED",
+          started_at: new Date("2026-05-09T10:00:00Z"),
+          finished_at: new Date("2026-05-09T10:00:05Z"),
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .get(`/orgs/google/sync/${TEST_JOB_ID}`)
+      .set(idHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("failed");
+    expect(res.body.error).toBe("Gmail API 403 SERVICE_DISABLED");
+    expect(res.body.summary).toBeNull();
+  });
+
+  it("returns 200 with status=running while job in flight", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: TEST_JOB_ID,
+          status: "running",
+          summary: null,
+          error: null,
+          started_at: new Date("2026-05-09T10:00:00Z"),
+          finished_at: null,
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .get(`/orgs/google/sync/${TEST_JOB_ID}`)
+      .set(idHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("running");
+    expect(res.body.finishedAt).toBeNull();
+  });
+
+  it("returns 404 when jobId not found", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .get(`/orgs/google/sync/${TEST_JOB_ID}`)
+      .set(idHeaders);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/not found/i);
+  });
+
+  it("scopes lookup by org_id (returns 404 for other org's job)", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app)
+      .get(`/orgs/google/sync/${TEST_JOB_ID}`)
+      .set(idHeaders);
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toContain("org_id = $1");
+    expect(params[0]).toBe(TEST_ORG_ID);
+    expect(params[1]).toBe(TEST_JOB_ID);
+  });
+
+  it("returns 400 for invalid uuid in :jobId", async () => {
+    const res = await request(app)
+      .get(`/orgs/google/sync/not-a-uuid`)
+      .set(idHeaders);
+    expect(res.status).toBe(400);
   });
 });
 

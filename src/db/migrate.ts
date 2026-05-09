@@ -117,6 +117,23 @@ CREATE TABLE IF NOT EXISTS google_contacts_raw (
 );
 CREATE INDEX IF NOT EXISTS idx_google_contacts_raw_org_id ON google_contacts_raw(org_id);
 CREATE INDEX IF NOT EXISTS idx_google_contacts_raw_account ON google_contacts_raw(google_account_id);
+
+-- ─── Async sync job tracking ───
+-- POST /orgs/google/sync inserts a row with status='running' and returns 202+jobId
+-- The HTTP handler returns immediately; a detached promise updates the row to
+-- 'succeeded' (with summary) or 'failed' (with error) when ingest completes.
+-- Caveat: a Railway redeploy mid-sync leaves the row stuck in 'running'.
+CREATE TABLE IF NOT EXISTS google_sync_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed')),
+  summary JSONB,
+  error TEXT,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_google_sync_jobs_org_started ON google_sync_jobs(org_id, started_at DESC);
 `;
 
 export const runMigrations = async (): Promise<void> => {
