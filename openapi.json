@@ -1443,6 +1443,78 @@
         ],
         "additionalProperties": false
       },
+      "GoogleAccountSummary": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active"
+            ]
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connectedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "status",
+          "scopes",
+          "connectedAt"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleAccountsListResponse": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active"
+                  ]
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "connectedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email",
+                "status",
+                "scopes",
+                "connectedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "additionalProperties": false
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
@@ -2182,6 +2254,41 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/google/accounts": {
+      "get": {
+        "summary": "List connected Google accounts for the org",
+        "description": "Returns the set of Google (Gmail) accounts the org has connected via OAuth. Sourced from google_oauth_tokens, scoped by x-org-id.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connected Google accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleAccountsListResponse"
                 }
               }
             }

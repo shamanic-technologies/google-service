@@ -311,6 +311,17 @@ export const GoogleContactsResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+export const GoogleAccountSummarySchema = z.object({
+  email: z.string(),
+  status: z.literal("active"),
+  scopes: z.array(z.string()),
+  connectedAt: z.string(),
+});
+
+export const GoogleAccountsListResponseSchema = z.object({
+  accounts: z.array(GoogleAccountSummarySchema),
+});
+
 // ─── Error ───
 
 export const ErrorResponseSchema = z.object({
