@@ -1,11 +1,18 @@
 import { query } from "../db/client";
-import { listPeopleConnections, type PersonResource } from "./google-api";
+import {
+  listOtherContacts,
+  listPeopleConnections,
+  type PersonResource,
+} from "./google-api";
 import {
   ensureFreshAccessToken,
+  updateOtherContactsSyncToken,
   updatePeopleSyncToken,
   type GoogleAccountToken,
 } from "./google-tokens";
 import type { CallerContext } from "./key-service";
+
+const OTHER_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.other.readonly";
 
 export interface PeopleIngestResult {
   inserted: number;
@@ -103,6 +110,63 @@ export const ingestPeopleForAccount = async (
 
   if (nextSyncToken) {
     await updatePeopleSyncToken(account.orgId, account.id, nextSyncToken);
+  }
+
+  return result;
+};
+
+export const ingestOtherPeopleForAccount = async (
+  account: GoogleAccountToken,
+  caller: CallerContext,
+  runId: string,
+  featureSlug: string | undefined,
+  brandId: string | undefined
+): Promise<PeopleIngestResult> => {
+  const result: PeopleIngestResult = { inserted: 0, updated: 0, unchanged: 0, deleted: 0 };
+
+  // Backwards compat: tokens minted before this scope was added must not fail the sync.
+  if (!account.scopes.split(/\s+/).includes(OTHER_CONTACTS_SCOPE)) {
+    console.warn(
+      `[google-service] skipping otherContacts ingest for account ${account.id} (org=${account.orgId}): token missing ${OTHER_CONTACTS_SCOPE} scope; user must reauth to receive Gmail-collected contacts`
+    );
+    return result;
+  }
+
+  const accessToken = await ensureFreshAccessToken(account, caller, runId, featureSlug, brandId);
+
+  let pageToken: string | undefined;
+  let nextSyncToken: string | undefined;
+  const useSyncToken = !!account.otherContactsSyncToken;
+
+  do {
+    const page = await listOtherContacts(accessToken, {
+      pageToken,
+      syncToken: useSyncToken && !pageToken ? account.otherContactsSyncToken! : undefined,
+      pageSize: 1000,
+      requestSyncToken: !pageToken,
+    });
+
+    pageToken = page.nextPageToken;
+    if (page.nextSyncToken) {
+      nextSyncToken = page.nextSyncToken;
+    }
+
+    if (page.otherContacts) {
+      for (const person of page.otherContacts) {
+        if (isDeleted(person)) {
+          if (await deleteContact(account.orgId, person.resourceName)) {
+            result.deleted += 1;
+          }
+          continue;
+        }
+        const outcome = await upsertContact(account.orgId, account.id, person);
+        result[outcome] += 1;
+      }
+    }
+  } while (pageToken);
+
+  if (nextSyncToken) {
+    await updateOtherContactsSyncToken(account.orgId, account.id, nextSyncToken);
   }
 
   return result;

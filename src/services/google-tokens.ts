@@ -13,6 +13,7 @@ export interface GoogleAccountToken {
   scopes: string;
   gmailHistoryId: string | null;
   peopleSyncToken: string | null;
+  otherContactsSyncToken: string | null;
 }
 
 const ACCESS_TOKEN_LEEWAY_MS = 60_000;
@@ -23,7 +24,7 @@ export const listOrgGoogleAccounts = async (
   const result = await query(
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
-            gmail_history_id, people_sync_token
+            gmail_history_id, people_sync_token, other_contacts_sync_token
        FROM google_oauth_tokens
        WHERE org_id = $1
        ORDER BY created_at ASC`,
@@ -39,7 +40,7 @@ export const getGoogleAccountById = async (
   const result = await query(
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
-            gmail_history_id, people_sync_token
+            gmail_history_id, people_sync_token, other_contacts_sync_token
        FROM google_oauth_tokens
        WHERE org_id = $1 AND id = $2`,
     [orgId, id]
@@ -59,6 +60,7 @@ const rowToToken = (row: Record<string, unknown>): GoogleAccountToken => ({
   scopes: row.scopes as string,
   gmailHistoryId: row.gmail_history_id == null ? null : String(row.gmail_history_id),
   peopleSyncToken: (row.people_sync_token as string | null) ?? null,
+  otherContactsSyncToken: (row.other_contacts_sync_token as string | null) ?? null,
 });
 
 export const upsertGoogleToken = async (params: {
@@ -88,7 +90,7 @@ export const upsertGoogleToken = async (params: {
         updated_at = NOW()
      RETURNING id, org_id, user_id, google_account_email, refresh_token,
                access_token, access_token_expires_at, scopes,
-               gmail_history_id, people_sync_token`,
+               gmail_history_id, people_sync_token, other_contacts_sync_token`,
     [
       params.orgId,
       params.userId,
@@ -125,6 +127,19 @@ export const updatePeopleSyncToken = async (
   await query(
     `UPDATE google_oauth_tokens
        SET people_sync_token = $3, updated_at = NOW()
+       WHERE org_id = $1 AND id = $2`,
+    [orgId, id, syncToken]
+  );
+};
+
+export const updateOtherContactsSyncToken = async (
+  orgId: string,
+  id: string,
+  syncToken: string
+): Promise<void> => {
+  await query(
+    `UPDATE google_oauth_tokens
+       SET other_contacts_sync_token = $3, updated_at = NOW()
        WHERE org_id = $1 AND id = $2`,
     [orgId, id, syncToken]
   );

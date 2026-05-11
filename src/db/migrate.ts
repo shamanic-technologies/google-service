@@ -90,6 +90,12 @@ CREATE TABLE IF NOT EXISTS google_oauth_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_google_oauth_tokens_org_id ON google_oauth_tokens(org_id);
 
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'google_oauth_tokens' AND column_name = 'other_contacts_sync_token') THEN
+    ALTER TABLE google_oauth_tokens ADD COLUMN other_contacts_sync_token TEXT;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS gmail_messages_raw (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id TEXT NOT NULL,
