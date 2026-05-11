@@ -141,3 +141,35 @@ export const listPeopleConnections = async (
     accessToken
   );
 };
+
+// otherContacts.list readMask must be a subset of the syncable fields when
+// requestSyncToken=true: emailAddresses, metadata, names, phoneNumbers.
+// photos is NOT syncable, so we exclude it.
+export const OTHER_CONTACTS_READ_MASK = [
+  "emailAddresses",
+  "metadata",
+  "names",
+  "phoneNumbers",
+].join(",");
+
+export interface PeopleListOtherContactsResponse {
+  otherContacts?: PersonResource[];
+  nextPageToken?: string;
+  nextSyncToken?: string;
+  totalSize?: number;
+}
+
+export const listOtherContacts = async (
+  accessToken: string,
+  params: { pageToken?: string; syncToken?: string; pageSize?: number; requestSyncToken?: boolean }
+): Promise<PeopleListOtherContactsResponse> => {
+  const qs = new URLSearchParams({ readMask: OTHER_CONTACTS_READ_MASK });
+  if (params.pageToken) qs.set("pageToken", params.pageToken);
+  if (params.syncToken) qs.set("syncToken", params.syncToken);
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.requestSyncToken) qs.set("requestSyncToken", "true");
+  return apiFetch<PeopleListOtherContactsResponse>(
+    `${PEOPLE_BASE}/otherContacts?${qs.toString()}`,
+    accessToken
+  );
+};

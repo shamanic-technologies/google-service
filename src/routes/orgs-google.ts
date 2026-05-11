@@ -26,7 +26,10 @@ import {
   type GoogleAccountToken,
 } from "../services/google-tokens";
 import { ingestGmailForAccount } from "../services/gmail-ingest";
-import { ingestPeopleForAccount } from "../services/people-ingest";
+import {
+  ingestOtherPeopleForAccount,
+  ingestPeopleForAccount,
+} from "../services/people-ingest";
 
 const router = Router();
 
@@ -257,17 +260,18 @@ const runSync = async (args: RunSyncArgs): Promise<void> => {
       contacts: { inserted: 0, updated: 0, unchanged: 0, deleted: 0 },
     };
     for (const account of accounts) {
-      const [gmailResult, peopleResult] = await Promise.all([
+      const [gmailResult, peopleResult, otherPeopleResult] = await Promise.all([
         ingestGmailForAccount(account, ctx, runId, featureSlug, brandId),
         ingestPeopleForAccount(account, ctx, runId, featureSlug, brandId),
+        ingestOtherPeopleForAccount(account, ctx, runId, featureSlug, brandId),
       ]);
       summary.gmail.inserted += gmailResult.inserted;
       summary.gmail.updated += gmailResult.updated;
       summary.gmail.unchanged += gmailResult.unchanged;
-      summary.contacts.inserted += peopleResult.inserted;
-      summary.contacts.updated += peopleResult.updated;
-      summary.contacts.unchanged += peopleResult.unchanged;
-      summary.contacts.deleted += peopleResult.deleted;
+      summary.contacts.inserted += peopleResult.inserted + otherPeopleResult.inserted;
+      summary.contacts.updated += peopleResult.updated + otherPeopleResult.updated;
+      summary.contacts.unchanged += peopleResult.unchanged + otherPeopleResult.unchanged;
+      summary.contacts.deleted += peopleResult.deleted + otherPeopleResult.deleted;
     }
     await query(
       `UPDATE google_sync_jobs

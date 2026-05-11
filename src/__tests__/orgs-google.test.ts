@@ -10,6 +10,7 @@ const {
   mockUpsertGoogleToken,
   mockIngestGmail,
   mockIngestPeople,
+  mockIngestOtherPeople,
   mockCreateRun,
   mockUpdateRun,
 } = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ const {
   mockUpsertGoogleToken: vi.fn(),
   mockIngestGmail: vi.fn(),
   mockIngestPeople: vi.fn(),
+  mockIngestOtherPeople: vi.fn(),
   mockCreateRun: vi.fn(),
   mockUpdateRun: vi.fn(),
 }));
@@ -78,6 +80,7 @@ vi.mock("../services/gmail-ingest", () => ({
 
 vi.mock("../services/people-ingest", () => ({
   ingestPeopleForAccount: (...args: unknown[]) => mockIngestPeople(...args),
+  ingestOtherPeopleForAccount: (...args: unknown[]) => mockIngestOtherPeople(...args),
 }));
 
 vi.mock("../services/runs-service", () => ({
@@ -134,6 +137,7 @@ beforeEach(() => {
     clientId: "client-abc",
     clientSecret: "secret-abc",
   });
+  mockIngestOtherPeople.mockResolvedValue({ inserted: 0, updated: 0, unchanged: 0, deleted: 0 });
 });
 
 afterEach(() => {
@@ -281,6 +285,7 @@ const acct = (id: string) => ({
   scopes: "",
   gmailHistoryId: null,
   peopleSyncToken: null,
+  otherContactsSyncToken: null,
 });
 
 const isInsertJob = (sql: unknown) =>
