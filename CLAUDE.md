@@ -35,9 +35,9 @@ This service owns **bronze** for Google CRM data. Silver/gold are out of scope (
 | Table | Natural key | Source | Notes |
 |-------|-------------|--------|-------|
 | `google_oauth_pending` | `(org_id, state)` | OAuth start | 10 min TTL, stores PKCE verifier |
-| `google_oauth_tokens` | `(org_id, google_account_email)` | OAuth callback | One row per (org, Gmail account). Stores refresh token, last access token, `gmail_history_id`, `people_sync_token` |
+| `google_oauth_tokens` | `(org_id, google_account_email)` | OAuth callback | One row per (org, Gmail account). Stores refresh token, last access token, `gmail_history_id`, `people_sync_token`, `other_contacts_sync_token` |
 | `gmail_messages_raw` | `(org_id, gmail_message_id)` | Gmail `messages.get format=full` | Full JSON payload in `payload jsonb` |
-| `google_contacts_raw` | `(org_id, resource_name)` | People `connections.list` | Full JSON payload in `payload jsonb` |
+| `google_contacts_raw` | `(org_id, resource_name)` | People `connections.list` AND `otherContacts.list` | Full JSON payload in `payload jsonb`. `resource_name` namespace distinguishes sources: `people/c...` = address book, `otherContacts/c...` = Gmail-collected. |
 | `google_sync_jobs` | `id` (UUID) | `POST /orgs/google/sync` | One row per sync request. `status` ∈ `running` \| `succeeded` \| `failed`; `summary` jsonb on success, `error` text on failure. Org-scoped lookups (`WHERE org_id = $1 AND id = $2`). |
 
 All bronze tables (and `google_sync_jobs`) are `org_id`-scoped. Every SQL query in `/orgs/google/*` includes `WHERE org_id = $N`.
@@ -70,7 +70,7 @@ Append-only is preserved in spirit: we never mutate audit metadata; we only refr
 2. Calls `runSyncInBackground({ jobId, orgId, ... })` which kicks off a detached promise (`void runSync(...).catch(...)`) — the HTTP handler does NOT await it.
 3. Returns `202 {jobId, status:"running"}` immediately.
 
-The detached promise updates the row to `succeeded` (with `summary` jsonb) or `failed` (with `error` text) once Gmail + People ingest finishes. Callers poll `GET /orgs/google/sync/{jobId}` until `status != 'running'`.
+The detached promise updates the row to `succeeded` (with `summary` jsonb) or `failed` (with `error` text) once Gmail + People (`connections.list` + `otherContacts.list`) ingest finishes. Callers poll `GET /orgs/google/sync/{jobId}` until `status != 'running'`. People connections (address book) and otherContacts (Gmail-collected) results are summed into a single `summary.contacts` accumulator — the UI does not distinguish the two sources. Tokens minted before the `contacts.other.readonly` scope was added skip the `otherContacts.list` call with a `console.warn`; the user must reauth to receive Gmail-collected contacts.
 
 **Why async** — the dashboard's Vercel proxy caps function invocations at 300 s (Pro plan). First-sync backfills against busy mailboxes blew past that and surfaced as `FUNCTION_INVOCATION_TIMEOUT sin1::...`. Returning 202 keeps the proxy round-trip well under the cap regardless of mailbox size.
 
