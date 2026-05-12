@@ -12,6 +12,8 @@ The client-service is the source of truth for identity resolution.
 
 See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Supertest, Railway).
 
+**Package manager: npm.** Lockfile is `package-lock.json`; the Dockerfile runs `npm ci`. Use `npm install` / `npm test` / `npm run build` locally. Do NOT run `pnpm install` here — it creates a stray `pnpm-lock.yaml` that diverges from the lockfile Railway actually reads.
+
 ## OAuth client credentials
 
 The Google OAuth client (Client ID + Secret) is the **same** for the Google Ads Developer Console and the Gmail/People consent flow — one Google Cloud project, one OAuth client. It is registered as platform keys `google-client-id` / `google-client-secret` by the dashboard (`apps/dashboard/src/instrumentation.ts`), not by this service.
