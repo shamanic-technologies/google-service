@@ -31,7 +31,7 @@ export const authorizeCredits = async (
   if (featureSlug) headers["x-feature-slug"] = featureSlug;
   if (brandId) headers["x-brand-id"] = brandId;
 
-  const res = await fetch(`${env.BILLING_SERVICE_URL}/v1/credits/authorize`, {
+  const res = await fetch(`${env.BILLING_SERVICE_URL}/v1/customer_balance/authorize`, {
     method: "POST",
     headers,
     body: JSON.stringify({ items, description }),
