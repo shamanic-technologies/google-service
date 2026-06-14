@@ -1,8 +1,9 @@
 import { Pool } from "pg";
 import { env } from "../env";
+import { withLibpqCompat } from "./ssl";
 
 export const pool = new Pool({
-  connectionString: env.GOOGLE_SERVICE_DATABASE_URL,
+  connectionString: withLibpqCompat(env.GOOGLE_SERVICE_DATABASE_URL),
   max: 10,
 });
 
