@@ -1,4 +1,5 @@
 import { env } from "../env";
+import { trackingHeaders } from "../lib/tracking-headers";
 
 export interface CallerContext {
   method: string;
@@ -15,7 +16,8 @@ export const getPlatformKey = async (
   caller: CallerContext,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<string> => {
   console.log(`[google-service] Resolving platform key: provider=${provider}`);
   const res = await fetch(
@@ -26,9 +28,7 @@ export const getPlatformKey = async (
         "X-Caller-Service": "google",
         "X-Caller-Method": caller.method,
         "X-Caller-Path": caller.path,
-        ...(runId ? { "x-run-id": runId } : {}),
-        ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
-        ...(brandId ? { "x-brand-id": brandId } : {}),
+        ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
       },
     }
   );
@@ -51,13 +51,14 @@ export const getGoogleCredentials = async (
   caller: CallerContext,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<GoogleCredentials> => {
   const [clientId, clientSecret, developerToken, mccAccountId] = await Promise.all([
-    getPlatformKey("google-client-id", caller, runId, featureSlug, brandId),
-    getPlatformKey("google-client-secret", caller, runId, featureSlug, brandId),
-    getPlatformKey("google-developer-token", caller, runId, featureSlug, brandId),
-    getPlatformKey("google-mcc-account-id", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-client-id", caller, runId, featureSlug, brandId, audienceId),
+    getPlatformKey("google-client-secret", caller, runId, featureSlug, brandId, audienceId),
+    getPlatformKey("google-developer-token", caller, runId, featureSlug, brandId, audienceId),
+    getPlatformKey("google-mcc-account-id", caller, runId, featureSlug, brandId, audienceId),
   ]);
   return { clientId, clientSecret, developerToken, mccAccountId };
 };
@@ -68,16 +69,15 @@ export const storeRefreshToken = async (
   refreshToken: string,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<void> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(`${env.KEY_SERVICE_URL}/internal/keys`, {
     method: "POST",
     headers: {
       ...headers(),
-      ...(runId ? { "x-run-id": runId } : {}),
-      ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
-      ...(brandId ? { "x-brand-id": brandId } : {}),
+      ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
     },
     body: JSON.stringify({ orgId, provider, apiKey: refreshToken }),
   });
@@ -93,7 +93,8 @@ export const getRefreshToken = async (
   caller: CallerContext,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<string> => {
   const provider = `google-ads-refresh-${accountId}`;
   const res = await fetch(
@@ -106,9 +107,7 @@ export const getRefreshToken = async (
         "X-Caller-Service": "google",
         "X-Caller-Method": caller.method,
         "X-Caller-Path": caller.path,
-        ...(runId ? { "x-run-id": runId } : {}),
-        ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
-        ...(brandId ? { "x-brand-id": brandId } : {}),
+        ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
       },
     }
   );
@@ -128,11 +127,12 @@ export const getGoogleOAuthClient = async (
   caller: CallerContext,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<GoogleOAuthClient> => {
   const [clientId, clientSecret] = await Promise.all([
-    getPlatformKey("google-client-id", caller, runId, featureSlug, brandId),
-    getPlatformKey("google-client-secret", caller, runId, featureSlug, brandId),
+    getPlatformKey("google-client-id", caller, runId, featureSlug, brandId, audienceId),
+    getPlatformKey("google-client-secret", caller, runId, featureSlug, brandId, audienceId),
   ]);
   return { clientId, clientSecret };
 };
@@ -148,7 +148,8 @@ export const getSerperApiKey = async (
   caller: CallerContext,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<SerperKeyResult> => {
   const provider = "serper-dev";
   console.log(`[google-service] Resolving Serper key via auto-resolve: orgId=${orgId}`);
@@ -162,9 +163,7 @@ export const getSerperApiKey = async (
         "X-Caller-Service": "google",
         "X-Caller-Method": caller.method,
         "X-Caller-Path": caller.path,
-        ...(runId ? { "x-run-id": runId } : {}),
-        ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
-        ...(brandId ? { "x-brand-id": brandId } : {}),
+        ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
       },
     }
   );

@@ -35,11 +35,13 @@ export const requireIdentityHeaders = (req: Request, res: Response, next: NextFu
 
   const featureSlug = req.headers["x-feature-slug"];
   const brandId = req.headers["x-brand-id"];
+  const audienceId = req.headers["x-audience-id"];
 
   req.orgId = orgId;
   req.userId = userId;
   req.featureSlug = typeof featureSlug === "string" ? featureSlug : undefined;
   req.brandId = typeof brandId === "string" ? brandId : undefined;
+  req.audienceId = typeof audienceId === "string" ? audienceId : undefined;
   next();
 };
 
@@ -90,6 +92,7 @@ declare global {
       runId?: string;
       featureSlug?: string;
       brandId?: string;
+      audienceId?: string;
     }
   }
 }
