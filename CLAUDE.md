@@ -8,6 +8,10 @@ All endpoints require `x-org-id` and `x-user-id` headers (UUIDs from client-serv
 These are the internal org/user identifiers — never use Clerk IDs (clerkOrgId/clerkUserId).
 The client-service is the source of truth for identity resolution.
 
+### Tracking / cost-attribution headers
+
+Inbound `x-run-id` (required), `x-feature-slug`, `x-brand-id`, **`x-audience-id`** (all optional) are the tracking block. They are read in `requireIdentityHeaders` (`src/middleware/validate.ts`) onto `req`, then forwarded to every **internal** sibling call (runs-service, billing-service, key-service) via the `trackingHeaders()` allowlist builder in `src/lib/tracking-headers.ts` — never cherry-picked per field. `x-audience-id` (the campaign's priority audience) tags `runs.audience_id` on `createRun` and the cost row on `addCosts`, which is how per-audience cost attribution works (`COALESCE(runs_costs.audience_id, runs.audience_id)` in runs-service). The only metered cost on the campaign path is `serper-dev-query` (`/search/*`). **Egress safety**: `trackingHeaders()` is imported ONLY by the internal clients; external vendor calls (Serper, Gmail/People, Google Ads, Google OAuth) build their own provider-auth headers and MUST never receive the tracking block.
+
 ## Stack
 
 See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Supertest, Railway).

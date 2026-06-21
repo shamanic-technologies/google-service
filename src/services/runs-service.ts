@@ -1,4 +1,5 @@
 import { env } from "../env";
+import { trackingHeaders } from "../lib/tracking-headers";
 
 const baseHeaders = () => ({
   "Content-Type": "application/json",
@@ -12,6 +13,7 @@ export interface CreateRunParams {
   service: string;
   featureSlug?: string;
   brandId?: string;
+  audienceId?: string;
 }
 
 export interface CostItem {
@@ -27,9 +29,12 @@ export const createRun = async (params: CreateRunParams): Promise<string> => {
       ...baseHeaders(),
       "x-org-id": params.orgId,
       "x-user-id": params.userId,
-      ...(params.parentRunId ? { "x-run-id": params.parentRunId } : {}),
-      ...(params.featureSlug ? { "x-feature-slug": params.featureSlug } : {}),
-      ...(params.brandId ? { "x-brand-id": params.brandId } : {}),
+      ...trackingHeaders({
+        runId: params.parentRunId,
+        featureSlug: params.featureSlug,
+        brandId: params.brandId,
+        audienceId: params.audienceId,
+      }),
     },
     body: JSON.stringify({
       serviceName: params.service,
@@ -53,7 +58,8 @@ export const updateRun = async (
   orgId: string,
   userId: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<void> => {
   const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/runs/${runId}`, {
     method: "PATCH",
@@ -61,9 +67,7 @@ export const updateRun = async (
       ...baseHeaders(),
       "x-org-id": orgId,
       "x-user-id": userId,
-      "x-run-id": runId,
-      ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
-      ...(brandId ? { "x-brand-id": brandId } : {}),
+      ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
     },
     body: JSON.stringify({ status }),
   });
@@ -81,7 +85,8 @@ export const addCosts = async (
   orgId: string,
   userId: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<void> => {
   const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/runs/${runId}/costs`, {
     method: "POST",
@@ -89,9 +94,7 @@ export const addCosts = async (
       ...baseHeaders(),
       "x-org-id": orgId,
       "x-user-id": userId,
-      "x-run-id": runId,
-      ...(featureSlug ? { "x-feature-slug": featureSlug } : {}),
-      ...(brandId ? { "x-brand-id": brandId } : {}),
+      ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
     },
     body: JSON.stringify({ items }),
   });

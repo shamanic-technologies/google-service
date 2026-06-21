@@ -1,4 +1,5 @@
 import { env } from "../env";
+import { trackingHeaders } from "../lib/tracking-headers";
 
 export interface AuthorizeCreditItem {
   costName: string;
@@ -18,18 +19,16 @@ export const authorizeCredits = async (
   userId: string,
   runId?: string,
   featureSlug?: string,
-  brandId?: string
+  brandId?: string,
+  audienceId?: string
 ): Promise<AuthorizeCreditsResult> => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-API-Key": env.BILLING_SERVICE_API_KEY,
     "x-org-id": orgId,
     "x-user-id": userId,
+    ...trackingHeaders({ runId, featureSlug, brandId, audienceId }),
   };
-
-  if (runId) headers["x-run-id"] = runId;
-  if (featureSlug) headers["x-feature-slug"] = featureSlug;
-  if (brandId) headers["x-brand-id"] = brandId;
 
   const res = await fetch(`${env.BILLING_SERVICE_URL}/v1/customer_balance/authorize`, {
     method: "POST",

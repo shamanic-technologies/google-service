@@ -290,7 +290,7 @@ describe("x-brand-id header propagation", () => {
     expect(res.status).toBe(200);
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, undefined, TEST_BRAND_ID);
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, undefined, TEST_BRAND_ID, undefined);
   });
 
   it("forwards brandId to authorizeCredits for search", async () => {
@@ -308,7 +308,8 @@ describe("x-brand-id header propagation", () => {
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
       undefined,
-      TEST_BRAND_ID
+      TEST_BRAND_ID,
+      undefined
     );
   });
 
@@ -327,7 +328,8 @@ describe("x-brand-id header propagation", () => {
       TEST_ORG_ID,
       TEST_USER_ID,
       undefined,
-      TEST_BRAND_ID
+      TEST_BRAND_ID,
+      undefined
     );
   });
 
@@ -345,7 +347,8 @@ describe("x-brand-id header propagation", () => {
       expect.objectContaining({ method: "POST" }),
       TEST_CHILD_RUN_ID,
       undefined,
-      TEST_BRAND_ID
+      TEST_BRAND_ID,
+      undefined
     );
   });
 
@@ -365,6 +368,116 @@ describe("x-brand-id header propagation", () => {
       TEST_ORG_ID, TEST_USER_ID, "111",
       expect.objectContaining({ method: "GET" }),
       TEST_CHILD_RUN_ID, undefined, TEST_BRAND_ID
+    );
+  });
+});
+
+// ─── Audience ID ───
+
+const TEST_AUDIENCE_ID = "7f9e6c2a-3b4d-4e5f-8a1b-2c3d4e5f6a7b";
+
+describe("x-audience-id header propagation", () => {
+  it("passes audienceId to createRun when header is present", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app)
+      .get("/auth/url")
+      .set({ ...idHeaders, "x-audience-id": TEST_AUDIENCE_ID });
+
+    expect(mockCreateRun).toHaveBeenCalledWith(
+      expect.objectContaining({ audienceId: TEST_AUDIENCE_ID })
+    );
+  });
+
+  it("passes undefined audienceId when header is absent", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app).get("/auth/url").set(idHeaders);
+
+    expect(mockCreateRun).toHaveBeenCalledWith(
+      expect.objectContaining({ audienceId: undefined })
+    );
+  });
+
+  it("forwards audienceId to updateRun when header is present", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: "uuid-1",
+        org_id: TEST_ORG_ID,
+        user_id: TEST_USER_ID,
+        account_id: "111",
+        mcc_id: "1234567890",
+        created_at: new Date("2024-01-01"),
+      }],
+    });
+
+    const res = await request(app)
+      .get("/accounts")
+      .set({ ...idHeaders, "x-audience-id": TEST_AUDIENCE_ID });
+    expect(res.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockUpdateRun).toHaveBeenCalledWith(
+      TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, undefined, undefined, TEST_AUDIENCE_ID
+    );
+  });
+
+  it("forwards audienceId to authorizeCredits for search (the campaign cost path)", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set({ ...idHeaders, "x-audience-id": TEST_AUDIENCE_ID })
+      .send({ query: "test" });
+
+    expect(mockAuthorizeCredits).toHaveBeenCalledWith(
+      [{ costName: "serper-dev-query", quantity: 1 }],
+      "serper-dev-query",
+      TEST_ORG_ID,
+      TEST_USER_ID,
+      TEST_CHILD_RUN_ID,
+      undefined,
+      undefined,
+      TEST_AUDIENCE_ID
+    );
+  });
+
+  it("forwards audienceId to addCosts for search (tags the cost row)", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set({ ...idHeaders, "x-audience-id": TEST_AUDIENCE_ID })
+      .send({ query: "test" });
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockAddCosts).toHaveBeenCalledWith(
+      TEST_CHILD_RUN_ID,
+      [{ costName: "serper-dev-query", quantity: 1, costSource: "platform" }],
+      TEST_ORG_ID,
+      TEST_USER_ID,
+      undefined,
+      undefined,
+      TEST_AUDIENCE_ID
+    );
+  });
+
+  it("forwards audienceId to getSerperApiKey for search", async () => {
+    mockSearchWeb.mockResolvedValueOnce([]);
+
+    await request(app)
+      .post("/search/web")
+      .set({ ...idHeaders, "x-audience-id": TEST_AUDIENCE_ID })
+      .send({ query: "test" });
+
+    expect(mockGetSerperApiKey).toHaveBeenCalledWith(
+      TEST_ORG_ID,
+      TEST_USER_ID,
+      expect.objectContaining({ method: "POST" }),
+      TEST_CHILD_RUN_ID,
+      undefined,
+      undefined,
+      TEST_AUDIENCE_ID
     );
   });
 });
@@ -416,7 +529,7 @@ describe("Run closing on response finish", () => {
 
     // Wait for async finish handler
     await new Promise((r) => setTimeout(r, 50));
-    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, undefined, undefined);
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, undefined, undefined, undefined);
   });
 
   it("closes run as failed on error response", async () => {
@@ -426,7 +539,7 @@ describe("Run closing on response finish", () => {
     expect(res.status).toBe(500);
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "failed", TEST_ORG_ID, TEST_USER_ID, undefined, undefined);
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "failed", TEST_ORG_ID, TEST_USER_ID, undefined, undefined, undefined);
   });
 
   it("forwards featureSlug to updateRun when header is present", async () => {
@@ -447,7 +560,7 @@ describe("Run closing on response finish", () => {
     expect(res.status).toBe(200);
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, "my-feature", undefined);
+    expect(mockUpdateRun).toHaveBeenCalledWith(TEST_CHILD_RUN_ID, "completed", TEST_ORG_ID, TEST_USER_ID, "my-feature", undefined, undefined);
   });
 });
 
@@ -913,6 +1026,7 @@ describe("POST /search/web", () => {
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
       undefined,
+      undefined,
       undefined
     );
   });
@@ -945,6 +1059,7 @@ describe("POST /search/web", () => {
       TEST_ORG_ID,
       TEST_USER_ID,
       undefined,
+      undefined,
       undefined
     );
   });
@@ -964,6 +1079,7 @@ describe("POST /search/web", () => {
       [{ costName: "serper-dev-query", quantity: 1, costSource: "org" }],
       TEST_ORG_ID,
       TEST_USER_ID,
+      undefined,
       undefined,
       undefined
     );
@@ -1067,6 +1183,7 @@ describe("POST /search/news", () => {
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
       undefined,
+      undefined,
       undefined
     );
   });
@@ -1114,6 +1231,7 @@ describe("POST /search/batch", () => {
       TEST_ORG_ID,
       TEST_USER_ID,
       TEST_CHILD_RUN_ID,
+      undefined,
       undefined,
       undefined
     );
@@ -1178,6 +1296,7 @@ describe("POST /search/batch", () => {
       [{ costName: "serper-dev-query", quantity: 3, costSource: "platform" }],
       TEST_ORG_ID,
       TEST_USER_ID,
+      undefined,
       undefined,
       undefined
     );
