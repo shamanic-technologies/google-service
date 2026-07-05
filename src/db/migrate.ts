@@ -140,6 +140,24 @@ CREATE TABLE IF NOT EXISTS google_sync_jobs (
   finished_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_google_sync_jobs_org_started ON google_sync_jobs(org_id, started_at DESC);
+
+-- ─── Per-contact CRM links (org/brand/feature tagging + reserved status) ───
+-- One row per (org, Google contact resourceName). LEFT-JOINed onto
+-- GET /orgs/google/contacts; upserted via PUT /orgs/google/contact-links.
+-- resourceName lives in the request BODY (never the path) because Google
+-- resourceNames contain "/". status is reserved (unused for now).
+CREATE TABLE IF NOT EXISTS google_contact_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  resource_name TEXT NOT NULL,
+  linked_org_ids TEXT[] NOT NULL DEFAULT '{}',
+  linked_brand_ids TEXT[] NOT NULL DEFAULT '{}',
+  linked_feature_slugs TEXT[] NOT NULL DEFAULT '{}',
+  status TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, resource_name)
+);
+CREATE INDEX IF NOT EXISTS idx_google_contact_links_org_id ON google_contact_links(org_id);
 `;
 
 export const runMigrations = async (): Promise<void> => {

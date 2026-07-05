@@ -45,8 +45,9 @@ This service owns **bronze** for Google CRM data. Silver/gold are out of scope (
 | `gmail_messages_raw` | `(org_id, gmail_message_id)` | Gmail `messages.get format=full` | Full JSON payload in `payload jsonb` |
 | `google_contacts_raw` | `(org_id, resource_name)` | People `connections.list` AND `otherContacts.list` | Full JSON payload in `payload jsonb`. `resource_name` namespace distinguishes sources: `people/c...` = address book, `otherContacts/c...` = Gmail-collected. |
 | `google_sync_jobs` | `id` (UUID) | `POST /orgs/google/sync` | One row per sync request. `status` ∈ `running` \| `succeeded` \| `failed`; `summary` jsonb on success, `error` text on failure. Org-scoped lookups (`WHERE org_id = $1 AND id = $2`). |
+| `google_contact_links` | `(org_id, resource_name)` | `PUT /orgs/google/contact-links` | Per-contact CRM tagging (NOT bronze — app state). `linked_org_ids`/`linked_brand_ids`/`linked_feature_slugs` TEXT[] default `'{}'`, `status` TEXT NULL (reserved). LEFT-JOINed onto `GET /orgs/google/contacts` as `links{}`; a contact with no row returns empty arrays + null status. `resource_name` lives in the request BODY, never the path (Google resourceNames contain `/`). |
 
-All bronze tables (and `google_sync_jobs`) are `org_id`-scoped. Every SQL query in `/orgs/google/*` includes `WHERE org_id = $N`.
+All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-scoped. Every SQL query in `/orgs/google/*` includes `WHERE org_id = $N`.
 
 ### Endpoints
 
@@ -56,8 +57,9 @@ All bronze tables (and `google_sync_jobs`) are `org_id`-scoped. Every SQL query 
 | `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens. Browser callback is proxied by the dashboard server-side so identity headers are present. |
 | `POST` | `/orgs/google/sync` | Start an async sync. Inserts a `google_sync_jobs` row, fires ingest in a detached promise, returns `202 {jobId, status:"running"}` immediately. Backfill on first run (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
 | `GET` | `/orgs/google/sync/{jobId}` | Poll job status. Returns `{jobId, status, summary, error, startedAt, finishedAt}`. Org-scoped: 404 if `jobId` belongs to another org. |
-| `GET` | `/orgs/google/messages` | Cursor-paginated raw Gmail messages |
-| `GET` | `/orgs/google/contacts` | Cursor-paginated raw Google contacts (text `query` matches `payload::text ILIKE`) |
+| `GET` | `/orgs/google/messages` | Cursor-paginated raw Gmail messages. Optional `?participant=<email>` filters to one contact's thread (email as From/To/Cc participant via `payload::text ILIKE`), ordered by the message's own email date (`internalDate`) newest-first; otherwise ordered by `fetched_at`. |
+| `GET` | `/orgs/google/contacts` | Cursor-paginated raw Google contacts (text `query` matches `payload::text ILIKE`). Each item carries `links{orgIds,brandIds,featureSlugs,status}` from `google_contact_links` (LEFT JOIN, unconditional). |
+| `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Idempotency strategy: upsert-when-different
 
