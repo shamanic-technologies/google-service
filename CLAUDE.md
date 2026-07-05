@@ -1,6 +1,6 @@
 # google-service
 
-Google Ads API v23 wrapper for MCC agency management, plus Google CRM bronze ingestion (Gmail + People readonly) feeding the dashboard CRM at `/orgs/{orgId}/services/crm`.
+Google Ads API v23 wrapper for MCC agency management, plus Google CRM bronze→silver ingestion (Gmail + People readonly) feeding the dashboard CRM at `/orgs/{orgId}/services/crm`.
 
 ## Identity
 
@@ -34,7 +34,21 @@ Manual one-off run still available via `pnpm migrate`, which runs `src/db/migrat
 
 ## Data layering
 
-This service owns **bronze** for Google CRM data. Silver/gold are out of scope (see triggers below).
+This service owns **bronze** and **silver** for Google CRM data. Gold is served as an additive read projection over bronze+silver (no separate gold table yet).
+
+**Silver tables** (`google_contacts_silver`, `gmail_messages_silver`) are typed projections of the bronze `*_raw` payloads, keyed on the SAME natural key as their bronze source (`(org_id, resource_name)` / `(org_id, gmail_message_id)`). They are:
+- **Populated at ingest** — `people-ingest`/`gmail-ingest` parse the payload via `src/services/silver.ts` (`parseContactSilver` / `parseMessageSilver`) and upsert silver right after the bronze upsert (only on inserted/updated bronze rows; deletes cascade to silver via `deleteContactSilver`).
+- **Backfilled from bronze on boot** — `src/services/backfill-silver.ts` runs AFTER `app.listen()` (never in the boot window) with `.catch(console.error)`, keyset-paginated + idempotent (upsert), so re-runs and silver schema changes are safe without re-fetching Google.
+
+Bronze stays the source of truth; silver is a rebuildable view. Contact silver columns: `display_name, primary_email, emails[], phones[], organization, job_title, photo_url, updated_at, deleted`. Message silver columns: `from_email, from_name, to_emails[], subject, snippet, sent_at, labels[], history_id`.
+
+### Read endpoints are ADDITIVE (gold)
+
+`GET /orgs/google/messages` and `/contacts` LEFT JOIN silver onto bronze and return the typed fields **alongside** every legacy field (incl `payload`) — the change is non-breaking, so it ships to prod before the dashboard consumer switches. Locked byte-equal contract with distribute.you admin — do NOT rename: messages add `fromEmail, fromName, to[], subject, snippet, sentAt, labels[]`; contacts add `displayName, primaryEmail, emails[], phones[], organization, jobTitle, photoUrl, updatedAt, deleted`. Messages sorted `sent_at` desc (fallback `fetched_at`); contacts deduped by `primary_email` (rows without an email key on `resource_name`, never dropped).
+
+### Cron auto-sync
+
+`src/services/cron-sync.ts` `startAutoSync()` (scheduled from `index.ts` after listen) runs `syncOrg` for every distinct org in `google_oauth_tokens` every `GOOGLE_SYNC_INTERVAL_HOURS` (default 6). First tick fires after one interval (no boot-storm). Low-frequency by design so Neon scale-to-zero stays effective — no high-frequency DB-ping loop; a fresh pool connection per query. Google People/Gmail calls use the user's own OAuth token (no metered platform cost → no cost declaration). `src/services/sync.ts` `syncOrg` is the shared core used by both the async HTTP sync job and the cron.
 
 ### Bronze tables
 
@@ -57,8 +71,8 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens. Browser callback is proxied by the dashboard server-side so identity headers are present. |
 | `POST` | `/orgs/google/sync` | Start an async sync. Inserts a `google_sync_jobs` row, fires ingest in a detached promise, returns `202 {jobId, status:"running"}` immediately. Backfill on first run (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
 | `GET` | `/orgs/google/sync/{jobId}` | Poll job status. Returns `{jobId, status, summary, error, startedAt, finishedAt}`. Org-scoped: 404 if `jobId` belongs to another org. |
-| `GET` | `/orgs/google/messages` | Cursor-paginated raw Gmail messages. Optional `?participant=<email>` filters to one contact's thread (email as From/To/Cc participant via `payload::text ILIKE`), ordered by the message's own email date (`internalDate`) newest-first; otherwise ordered by `fetched_at`. |
-| `GET` | `/orgs/google/contacts` | Cursor-paginated raw Google contacts (text `query` matches `payload::text ILIKE`). Each item carries `links{orgIds,brandIds,featureSlugs,status}` from `google_contact_links` (LEFT JOIN, unconditional). |
+| `GET` | `/orgs/google/messages` | Cursor-paginated Gmail messages: bronze payload + typed silver fields, ordered by silver `sent_at` desc (fallback `fetched_at`). Optional `?participant=<email>` filters to one contact's thread (From/To/Cc participant via `payload::text ILIKE`), ordered by the message's own email date (`internalDate`) newest-first. |
+| `GET` | `/orgs/google/contacts` | Cursor-paginated Google contacts: bronze payload + typed silver fields, deduped by `primary_email` (text `query` matches `payload::text ILIKE`). Each item also carries `links{orgIds,brandIds,featureSlugs,status}` from `google_contact_links` (LEFT JOIN, unconditional). |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Idempotency strategy: upsert-when-different
@@ -84,15 +98,13 @@ The detached promise updates the row to `succeeded` (with `summary` jsonb) or `f
 
 **Restart caveat (v1 trade-off)** — there is no queue and no worker. If the Railway service restarts mid-sync, the row stays `running` forever. Acceptable while sync is user-driven (the user can simply re-click sync); revisit when sync becomes scheduled or volume grows. The next iteration is `pgmq` with a reaper that flips long-stale `running` rows to `failed`.
 
-### Future silver trigger
+### Future gold / canonical-Human trigger
 
-Build a silver `messages` / `contacts` / `humans` projection only when one of the following is true:
+Silver (`google_contacts_silver` / `gmail_messages_silver`) exists (see Data layering above). Promote further — a canonical `Human` entity or a materialized gold table — only when one of:
 
-1. The dashboard CRM UI demands faceted search, cross-source joins, or typed filters that Postgres views over `jsonb` cannot satisfy efficiently.
-2. A second source (LinkedIn, Apollo, manual import) feeds the same canonical `Human` and merging is required.
-3. Multiple consumers query the same projection and bronze re-projection is too expensive each time.
-
-Until then, the dashboard reads bronze directly via `/orgs/google/messages` and `/orgs/google/contacts`.
+1. A second source (LinkedIn, Apollo, manual import) feeds the same canonical `Human` and cross-source merging is required (silver here is single-source per resource).
+2. The read projection (bronze+silver LEFT JOIN + dedup) becomes too expensive per request and needs a materialized gold table.
+3. Manual user edits must coexist with derived data (needs a `*_overrides` table winning over silver).
 
 ## OAuth flow
 

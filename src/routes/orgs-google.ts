@@ -21,16 +21,8 @@ import {
   generateState,
   GOOGLE_CRM_SCOPES,
 } from "../services/google-oauth";
-import {
-  listOrgGoogleAccounts,
-  upsertGoogleToken,
-  type GoogleAccountToken,
-} from "../services/google-tokens";
-import { ingestGmailForAccount } from "../services/gmail-ingest";
-import {
-  ingestOtherPeopleForAccount,
-  ingestPeopleForAccount,
-} from "../services/people-ingest";
+import { upsertGoogleToken } from "../services/google-tokens";
+import { syncOrg } from "../services/sync";
 
 const router = Router();
 
@@ -254,26 +246,7 @@ const runSyncInBackground = (args: RunSyncArgs): void => {
 const runSync = async (args: RunSyncArgs): Promise<void> => {
   const { jobId, orgId, callerCtx: ctx, runId, featureSlug, brandId } = args;
   try {
-    const accounts = await listOrgGoogleAccounts(orgId);
-    const summary = {
-      accounts: accounts.length,
-      gmail: { inserted: 0, updated: 0, unchanged: 0 },
-      contacts: { inserted: 0, updated: 0, unchanged: 0, deleted: 0 },
-    };
-    for (const account of accounts) {
-      const [gmailResult, peopleResult, otherPeopleResult] = await Promise.all([
-        ingestGmailForAccount(account, ctx, runId, featureSlug, brandId),
-        ingestPeopleForAccount(account, ctx, runId, featureSlug, brandId),
-        ingestOtherPeopleForAccount(account, ctx, runId, featureSlug, brandId),
-      ]);
-      summary.gmail.inserted += gmailResult.inserted;
-      summary.gmail.updated += gmailResult.updated;
-      summary.gmail.unchanged += gmailResult.unchanged;
-      summary.contacts.inserted += peopleResult.inserted + otherPeopleResult.inserted;
-      summary.contacts.updated += peopleResult.updated + otherPeopleResult.updated;
-      summary.contacts.unchanged += peopleResult.unchanged + otherPeopleResult.unchanged;
-      summary.contacts.deleted += peopleResult.deleted + otherPeopleResult.deleted;
-    }
+    const summary = await syncOrg(orgId, ctx, runId, featureSlug, brandId);
     await query(
       `UPDATE google_sync_jobs
           SET status = 'succeeded', summary = $1, finished_at = NOW()
@@ -360,16 +333,20 @@ router.get(
       const limit = q.limit ?? 50;
       const cursor = decodeCursor(q.cursor);
 
-      const conditions: string[] = ["org_id = $1"];
+      // Bronze (m) is the primary source-of-truth row set (payload preserved,
+      // every row returned); silver (s) is LEFT JOINed to add the typed fields
+      // additively. Sort by message send time (sent_at) desc, falling back to
+      // bronze fetched_at when a row is not yet parsed.
+      const conditions: string[] = ["m.org_id = $1"];
       const params: unknown[] = [orgId];
 
       if (q.account_id) {
         params.push(q.account_id);
-        conditions.push(`google_account_id = $${params.length}`);
+        conditions.push(`m.google_account_id = $${params.length}`);
       }
       if (q.thread_id) {
         params.push(q.thread_id);
-        conditions.push(`thread_id = $${params.length}`);
+        conditions.push(`m.thread_id = $${params.length}`);
       }
       // When filtering to one contact's email thread, match the participant's
       // email anywhere in the raw message (From/To/Cc headers + body). ILIKE
@@ -377,27 +354,33 @@ router.get(
       // correctness over index).
       if (q.participant) {
         params.push(`%${q.participant}%`);
-        conditions.push(`payload::text ILIKE $${params.length}`);
+        conditions.push(`m.payload::text ILIKE $${params.length}`);
       }
       if (cursor) {
-        params.push(cursor.fetchedAt);
+        params.push(cursor.ts);
         params.push(cursor.id);
         conditions.push(
-          `(fetched_at, id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
+          `(COALESCE(s.sent_at, m.fetched_at), m.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
         );
       }
 
       // Participant (single-thread) view is ordered by the message's own email
-      // date (Gmail internalDate, epoch ms) newest-first; the default listing
-      // stays ordered by fetched_at.
+      // date (Gmail internalDate, epoch ms) newest-first; the default listing is
+      // ordered by the typed silver sent_at desc (fallback bronze fetched_at).
       const orderBy = q.participant
-        ? `(payload->>'internalDate')::bigint DESC NULLS LAST, id DESC`
-        : `fetched_at DESC, id DESC`;
+        ? `(m.payload->>'internalDate')::bigint DESC NULLS LAST, m.id DESC`
+        : `COALESCE(s.sent_at, m.fetched_at) DESC, m.id DESC`;
 
       params.push(limit + 1);
       const rows = await query(
-        `SELECT id, google_account_id, gmail_message_id, thread_id, history_id, payload, fetched_at
-           FROM gmail_messages_raw
+        `SELECT m.id, m.google_account_id, m.gmail_message_id, m.thread_id, m.history_id,
+                m.payload, m.fetched_at,
+                s.from_email, s.from_name, s.to_emails, s.subject, s.snippet,
+                s.sent_at, s.labels,
+                COALESCE(s.sent_at, m.fetched_at) AS sort_at
+           FROM gmail_messages_raw m
+           LEFT JOIN gmail_messages_silver s
+             ON s.org_id = m.org_id AND s.gmail_message_id = m.gmail_message_id
            WHERE ${conditions.join(" AND ")}
            ORDER BY ${orderBy}
            LIMIT $${params.length}`,
@@ -414,11 +397,19 @@ router.get(
         historyId: String(row.history_id),
         payload: row.payload,
         fetchedAt: (row.fetched_at as Date).toISOString(),
+        // Typed silver fields (null/[] when the row is not yet parsed).
+        fromEmail: (row.from_email as string | null) ?? null,
+        fromName: (row.from_name as string | null) ?? null,
+        to: (row.to_emails as string[] | null) ?? [],
+        subject: (row.subject as string | null) ?? null,
+        snippet: (row.snippet as string | null) ?? null,
+        sentAt: toIso(row.sent_at),
+        labels: (row.labels as string[] | null) ?? [],
       }));
 
       const nextCursor = hasMore
         ? encodeCursor({
-            fetchedAt: (slice[slice.length - 1].fetched_at as Date).toISOString(),
+            ts: sortTs(slice[slice.length - 1]),
             id: slice[slice.length - 1].id as string,
           })
         : null;
@@ -448,40 +439,59 @@ router.get(
       const limit = q.limit ?? 50;
       const cursor = decodeCursor(q.cursor);
 
-      const conditions: string[] = ["c.org_id = $1"];
+      // Bronze (c) LEFT JOIN silver (s) for typed fields + LEFT JOIN
+      // google_contact_links (l) for per-contact CRM links — all additive. Dedup:
+      // contacts that share a primary_email (Gmail-collected + address-book) are
+      // collapsed to one row; rows without an email key on resource_name (always
+      // unique) so they are never dropped. Pagination stays on (fetched_at, id).
+      const innerConditions: string[] = ["c.org_id = $1"];
       const params: unknown[] = [orgId];
 
       if (q.account_id) {
         params.push(q.account_id);
-        conditions.push(`c.google_account_id = $${params.length}`);
+        innerConditions.push(`c.google_account_id = $${params.length}`);
       }
       if (q.query) {
         params.push(`%${q.query}%`);
-        conditions.push(`c.payload::text ILIKE $${params.length}`);
+        innerConditions.push(`c.payload::text ILIKE $${params.length}`);
       }
+
+      const outerConditions: string[] = ["rn = 1"];
       if (cursor) {
-        params.push(cursor.fetchedAt);
+        params.push(cursor.ts);
         params.push(cursor.id);
-        conditions.push(
-          `(c.fetched_at, c.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
+        outerConditions.push(
+          `(fetched_at, id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
         );
       }
 
       params.push(limit + 1);
-      // LEFT JOIN persisted per-contact links; a contact with no link row
-      // yields empty arrays + null status via COALESCE.
+      // A contact with no silver row yields null/[] typed fields; with no link
+      // row yields empty arrays + null status via COALESCE.
       const rows = await query(
-        `SELECT c.id, c.google_account_id, c.resource_name, c.etag, c.payload, c.fetched_at,
-                COALESCE(l.linked_org_ids, '{}') AS linked_org_ids,
-                COALESCE(l.linked_brand_ids, '{}') AS linked_brand_ids,
-                COALESCE(l.linked_feature_slugs, '{}') AS linked_feature_slugs,
-                l.status AS link_status
-           FROM google_contacts_raw c
-           LEFT JOIN google_contact_links l
-             ON l.org_id = c.org_id AND l.resource_name = c.resource_name
-           WHERE ${conditions.join(" AND ")}
-           ORDER BY c.fetched_at DESC, c.id DESC
-           LIMIT $${params.length}`,
+        `WITH ranked AS (
+           SELECT c.id, c.google_account_id, c.resource_name, c.etag, c.payload, c.fetched_at,
+                  s.display_name, s.primary_email, s.emails, s.phones, s.organization,
+                  s.job_title, s.photo_url, s.updated_at AS silver_updated_at, s.deleted,
+                  COALESCE(l.linked_org_ids, '{}') AS linked_org_ids,
+                  COALESCE(l.linked_brand_ids, '{}') AS linked_brand_ids,
+                  COALESCE(l.linked_feature_slugs, '{}') AS linked_feature_slugs,
+                  l.status AS link_status,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY COALESCE(lower(s.primary_email), c.resource_name)
+                    ORDER BY c.fetched_at DESC, c.id DESC
+                  ) AS rn
+             FROM google_contacts_raw c
+             LEFT JOIN google_contacts_silver s
+               ON s.org_id = c.org_id AND s.resource_name = c.resource_name
+             LEFT JOIN google_contact_links l
+               ON l.org_id = c.org_id AND l.resource_name = c.resource_name
+             WHERE ${innerConditions.join(" AND ")}
+         )
+         SELECT * FROM ranked
+         WHERE ${outerConditions.join(" AND ")}
+         ORDER BY fetched_at DESC, id DESC
+         LIMIT $${params.length}`,
         params
       );
 
@@ -494,6 +504,17 @@ router.get(
         etag: (row.etag as string | null) ?? null,
         payload: row.payload,
         fetchedAt: (row.fetched_at as Date).toISOString(),
+        // Typed silver fields (null/[] when the row is not yet parsed).
+        displayName: (row.display_name as string | null) ?? null,
+        primaryEmail: (row.primary_email as string | null) ?? null,
+        emails: (row.emails as string[] | null) ?? [],
+        phones: (row.phones as string[] | null) ?? [],
+        organization: (row.organization as string | null) ?? null,
+        jobTitle: (row.job_title as string | null) ?? null,
+        photoUrl: (row.photo_url as string | null) ?? null,
+        updatedAt: toIso(row.silver_updated_at),
+        deleted: (row.deleted as boolean | null) ?? false,
+        // Per-contact CRM links (empty arrays + null status when no link row).
         links: {
           orgIds: (row.linked_org_ids as string[]) ?? [],
           brandIds: (row.linked_brand_ids as string[]) ?? [],
@@ -504,7 +525,7 @@ router.get(
 
       const nextCursor = hasMore
         ? encodeCursor({
-            fetchedAt: (slice[slice.length - 1].fetched_at as Date).toISOString(),
+            ts: (slice[slice.length - 1].fetched_at as Date).toISOString(),
             id: slice[slice.length - 1].id as string,
           })
         : null;
@@ -515,6 +536,20 @@ router.get(
     }
   }
 );
+
+// ─── Field helpers ───
+
+// Coerce a pg timestamptz (Date) or null into an ISO string or null.
+const toIso = (v: unknown): string | null =>
+  v instanceof Date ? v.toISOString() : null;
+
+// Sort timestamp for a message row: the silver sent_at when present (aliased as
+// sort_at in the SQL), else bronze fetched_at. Robust to rows lacking sort_at.
+const sortTs = (row: Record<string, unknown>): string => {
+  if (row.sort_at instanceof Date) return row.sort_at.toISOString();
+  if (row.sent_at instanceof Date) return row.sent_at.toISOString();
+  return (row.fetched_at as Date).toISOString();
+};
 
 // ─── PUT /orgs/google/contact-links ───
 //
@@ -580,7 +615,7 @@ router.put(
 // ─── Cursor helpers ───
 
 interface CursorPayload {
-  fetchedAt: string;
+  ts: string;
   id: string;
 }
 
@@ -591,10 +626,10 @@ const decodeCursor = (raw: string | undefined): CursorPayload | null => {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf-8"));
-    if (typeof parsed.fetchedAt !== "string" || typeof parsed.id !== "string") {
+    if (typeof parsed.ts !== "string" || typeof parsed.id !== "string") {
       throw new Error("invalid cursor shape");
     }
-    return { fetchedAt: parsed.fetchedAt, id: parsed.id };
+    return { ts: parsed.ts, id: parsed.id };
   } catch (err) {
     throw new Error(`invalid cursor: ${(err as Error).message}`);
   }

@@ -572,6 +572,79 @@ describe("GET /orgs/google/messages", () => {
     expect(params).toContain("tt-9");
   });
 
+  it("returns typed silver fields AND legacy fields (incl payload) additively", async () => {
+    const sentAt = new Date("2026-05-23T10:00:00.000Z");
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "00000000-0000-4000-a000-000000000100",
+          google_account_id: TEST_ACCOUNT_UUID,
+          gmail_message_id: "m-1",
+          thread_id: "t-1",
+          history_id: 999,
+          payload: { snippet: "raw payload here" },
+          fetched_at: new Date("2026-05-23T11:00:00.000Z"),
+          from_email: "grace@navy.mil",
+          from_name: "Grace Hopper",
+          to_emails: ["a@x.com", "bob@y.com"],
+          subject: "Compilers",
+          snippet: "hello there",
+          sent_at: sentAt,
+          labels: ["INBOX"],
+          sort_at: sentAt,
+        },
+      ],
+    });
+
+    const res = await request(app).get("/orgs/google/messages").set(idHeaders);
+    expect(res.status).toBe(200);
+    const item = res.body.items[0];
+    // legacy fields preserved
+    expect(item.gmailMessageId).toBe("m-1");
+    expect(item.historyId).toBe("999");
+    expect(item.payload.snippet).toBe("raw payload here");
+    expect(item.fetchedAt).toBe("2026-05-23T11:00:00.000Z");
+    // typed silver fields (locked contract)
+    expect(item.fromEmail).toBe("grace@navy.mil");
+    expect(item.fromName).toBe("Grace Hopper");
+    expect(item.to).toEqual(["a@x.com", "bob@y.com"]);
+    expect(item.subject).toBe("Compilers");
+    expect(item.snippet).toBe("hello there");
+    expect(item.sentAt).toBe("2026-05-23T10:00:00.000Z");
+    expect(item.labels).toEqual(["INBOX"]);
+  });
+
+  it("returns null/[] typed fields when silver row absent (LEFT JOIN)", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "00000000-0000-4000-a000-000000000101",
+          google_account_id: TEST_ACCOUNT_UUID,
+          gmail_message_id: "m-2",
+          thread_id: "t-2",
+          history_id: 1,
+          payload: { snippet: "x" },
+          fetched_at: new Date("2026-05-23T11:00:00.000Z"),
+          from_email: null,
+          from_name: null,
+          to_emails: null,
+          subject: null,
+          snippet: null,
+          sent_at: null,
+          labels: null,
+          sort_at: new Date("2026-05-23T11:00:00.000Z"),
+        },
+      ],
+    });
+
+    const res = await request(app).get("/orgs/google/messages").set(idHeaders);
+    const item = res.body.items[0];
+    expect(item.fromEmail).toBeNull();
+    expect(item.to).toEqual([]);
+    expect(item.sentAt).toBeNull();
+    expect(item.labels).toEqual([]);
+  });
+
   it("filters by participant email via ILIKE and orders by internalDate DESC", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
@@ -581,16 +654,16 @@ describe("GET /orgs/google/messages", () => {
     const sql = mockQuery.mock.calls[0][0] as string;
     const params = mockQuery.mock.calls[0][1] as unknown[];
     expect(sql).toContain("payload::text ILIKE");
-    expect(sql).toContain("(payload->>'internalDate')::bigint DESC");
+    expect(sql).toContain("(m.payload->>'internalDate')::bigint DESC");
     expect(params).toContain("%alice@example.com%");
   });
 
-  it("keeps default fetched_at ordering when participant absent", async () => {
+  it("orders by silver sent_at desc (fallback fetched_at) when participant absent", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     await request(app).get("/orgs/google/messages").set(idHeaders);
     const sql = mockQuery.mock.calls[0][0] as string;
-    expect(sql).toContain("ORDER BY fetched_at DESC, id DESC");
+    expect(sql).toContain("ORDER BY COALESCE(s.sent_at, m.fetched_at) DESC, m.id DESC");
     expect(sql).not.toContain("internalDate");
   });
 });
@@ -682,7 +755,18 @@ describe("GET /orgs/google/contacts", () => {
     expect(res.body.items[0].payload.names[0].displayName).toBe("Alice");
   });
 
-  it("LEFT JOINs contact links and returns persisted values", async () => {
+  it("dedups via ROW_NUMBER window over primary_email in SQL", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await request(app).get("/orgs/google/contacts").set(idHeaders);
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain("ROW_NUMBER()");
+    expect(sql).toContain("PARTITION BY COALESCE(lower(s.primary_email), c.resource_name)");
+    expect(sql).toContain("LEFT JOIN google_contacts_silver");
+    expect(sql).toContain("LEFT JOIN google_contact_links");
+  });
+
+  it("returns typed silver fields, links, AND legacy fields (incl payload) additively", async () => {
+    const updatedAt = new Date("2026-05-01T00:00:00.000Z");
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -691,7 +775,16 @@ describe("GET /orgs/google/contacts", () => {
           resource_name: "people/c1",
           etag: "abc",
           payload: { names: [{ displayName: "Alice" }] },
-          fetched_at: new Date(),
+          fetched_at: new Date("2026-05-01T01:00:00.000Z"),
+          display_name: "Alice Turing",
+          primary_email: "alice@x.com",
+          emails: ["alice@x.com", "a2@x.com"],
+          phones: ["+15550001111"],
+          organization: "Bletchley",
+          job_title: "Cryptanalyst",
+          photo_url: "https://p/alice.jpg",
+          silver_updated_at: updatedAt,
+          deleted: false,
           linked_org_ids: ["org-1", "org-2"],
           linked_brand_ids: ["brand-9"],
           linked_feature_slugs: ["crm"],
@@ -699,10 +792,26 @@ describe("GET /orgs/google/contacts", () => {
         },
       ],
     });
+
     const res = await request(app).get("/orgs/google/contacts").set(idHeaders);
-    const sql = mockQuery.mock.calls[0][0] as string;
-    expect(sql).toContain("LEFT JOIN google_contact_links");
-    expect(res.body.items[0].links).toEqual({
+    expect(res.status).toBe(200);
+    const item = res.body.items[0];
+    // legacy preserved
+    expect(item.resourceName).toBe("people/c1");
+    expect(item.etag).toBe("abc");
+    expect(item.payload.names[0].displayName).toBe("Alice");
+    // typed silver (locked contract)
+    expect(item.displayName).toBe("Alice Turing");
+    expect(item.primaryEmail).toBe("alice@x.com");
+    expect(item.emails).toEqual(["alice@x.com", "a2@x.com"]);
+    expect(item.phones).toEqual(["+15550001111"]);
+    expect(item.organization).toBe("Bletchley");
+    expect(item.jobTitle).toBe("Cryptanalyst");
+    expect(item.photoUrl).toBe("https://p/alice.jpg");
+    expect(item.updatedAt).toBe("2026-05-01T00:00:00.000Z");
+    expect(item.deleted).toBe(false);
+    // per-contact links (locked contract)
+    expect(item.links).toEqual({
       orgIds: ["org-1", "org-2"],
       brandIds: ["brand-9"],
       featureSlugs: ["crm"],
