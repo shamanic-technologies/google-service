@@ -189,6 +189,24 @@ CREATE TABLE IF NOT EXISTS gmail_messages_silver (
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_org ON gmail_messages_silver(org_id);
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_sent ON gmail_messages_silver(org_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_thread ON gmail_messages_silver(thread_id);
+
+-- ─── Per-contact CRM links (org/brand/feature tagging + reserved status) ───
+-- One row per (org, Google contact resourceName). LEFT-JOINed onto
+-- GET /orgs/google/contacts; upserted via PUT /orgs/google/contact-links.
+-- resourceName lives in the request BODY (never the path) because Google
+-- resourceNames contain "/". status is reserved (unused for now).
+CREATE TABLE IF NOT EXISTS google_contact_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  resource_name TEXT NOT NULL,
+  linked_org_ids TEXT[] NOT NULL DEFAULT '{}',
+  linked_brand_ids TEXT[] NOT NULL DEFAULT '{}',
+  linked_feature_slugs TEXT[] NOT NULL DEFAULT '{}',
+  status TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, resource_name)
+);
+CREATE INDEX IF NOT EXISTS idx_google_contact_links_org_id ON google_contact_links(org_id);
 `;
 
 export const runMigrations = async (): Promise<void> => {

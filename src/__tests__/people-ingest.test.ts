@@ -171,6 +171,54 @@ describe("ingestOtherPeopleForAccount", () => {
     expect(warnSpy.mock.calls[0][0]).toMatch(/\[google-service\]/);
   });
 
+  it("multi-page (>1000 contacts): requestSyncToken stays true on every page, no 400", async () => {
+    // Page 1 returns a nextPageToken (i.e. account has >1000 contacts spanning
+    // multiple pages). Page 2 is the final page and carries nextSyncToken.
+    mockListOtherContacts
+      .mockResolvedValueOnce({
+        otherContacts: [{ resourceName: "otherContacts/c1", etag: "e1" }],
+        nextPageToken: "page-2-token",
+      })
+      .mockResolvedValueOnce({
+        otherContacts: [{ resourceName: "otherContacts/c2", etag: "e2" }],
+        nextSyncToken: "final-sync-tok",
+      });
+    mockQuery.mockResolvedValue({ rows: [{ inserted: true }], rowCount: 1 });
+
+    const result = await ingestOtherPeopleForAccount(
+      makeAccount(),
+      caller,
+      TEST_RUN_ID,
+      undefined,
+      undefined
+    );
+
+    expect(result.inserted).toBe(2);
+    expect(mockListOtherContacts).toHaveBeenCalledTimes(2);
+
+    // Page 1: no pageToken, requestSyncToken true.
+    expect(mockListOtherContacts.mock.calls[0][1]).toMatchObject({
+      pageToken: undefined,
+      requestSyncToken: true,
+    });
+    // Page 2: has pageToken, requestSyncToken STILL true (the bug set it to
+    // false here, which Google 400s). syncToken remains undefined (exempt param).
+    expect(mockListOtherContacts.mock.calls[1][1]).toMatchObject({
+      pageToken: "page-2-token",
+      requestSyncToken: true,
+    });
+
+    // requestSyncToken must be constant across all pages.
+    const flags = mockListOtherContacts.mock.calls.map((c) => c[1].requestSyncToken);
+    expect(new Set(flags)).toEqual(new Set([true]));
+
+    expect(mockUpdateOtherContactsSyncToken).toHaveBeenCalledWith(
+      TEST_ORG_ID,
+      TEST_ACCOUNT_ID,
+      "final-sync-tok"
+    );
+  });
+
   it("delta path: passes stored syncToken on first page when present", async () => {
     mockListOtherContacts.mockResolvedValueOnce({
       otherContacts: [],

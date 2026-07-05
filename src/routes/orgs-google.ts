@@ -9,6 +9,7 @@ import {
   GoogleAuthCallbackQuerySchema,
   GoogleMessagesQuerySchema,
   GoogleContactsQuerySchema,
+  GoogleContactLinkPutBodySchema,
   GoogleSyncJobIdParamSchema,
 } from "../schemas";
 import { getGoogleOAuthClient, type CallerContext } from "../services/key-service";
@@ -326,6 +327,7 @@ router.get(
         cursor?: string;
         account_id?: string;
         thread_id?: string;
+        participant?: string;
       };
 
       const limit = q.limit ?? 50;
@@ -346,6 +348,14 @@ router.get(
         params.push(q.thread_id);
         conditions.push(`m.thread_id = $${params.length}`);
       }
+      // When filtering to one contact's email thread, match the participant's
+      // email anywhere in the raw message (From/To/Cc headers + body). ILIKE
+      // over the jsonb text is intentional per the bronze pattern (staff CRM,
+      // correctness over index).
+      if (q.participant) {
+        params.push(`%${q.participant}%`);
+        conditions.push(`m.payload::text ILIKE $${params.length}`);
+      }
       if (cursor) {
         params.push(cursor.ts);
         params.push(cursor.id);
@@ -353,6 +363,13 @@ router.get(
           `(COALESCE(s.sent_at, m.fetched_at), m.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
         );
       }
+
+      // Participant (single-thread) view is ordered by the message's own email
+      // date (Gmail internalDate, epoch ms) newest-first; the default listing is
+      // ordered by the typed silver sent_at desc (fallback bronze fetched_at).
+      const orderBy = q.participant
+        ? `(m.payload->>'internalDate')::bigint DESC NULLS LAST, m.id DESC`
+        : `COALESCE(s.sent_at, m.fetched_at) DESC, m.id DESC`;
 
       params.push(limit + 1);
       const rows = await query(
@@ -365,7 +382,7 @@ router.get(
            LEFT JOIN gmail_messages_silver s
              ON s.org_id = m.org_id AND s.gmail_message_id = m.gmail_message_id
            WHERE ${conditions.join(" AND ")}
-           ORDER BY COALESCE(s.sent_at, m.fetched_at) DESC, m.id DESC
+           ORDER BY ${orderBy}
            LIMIT $${params.length}`,
         params
       );
@@ -422,7 +439,8 @@ router.get(
       const limit = q.limit ?? 50;
       const cursor = decodeCursor(q.cursor);
 
-      // Bronze (c) LEFT JOIN silver (s) for the typed fields, additively. Dedup:
+      // Bronze (c) LEFT JOIN silver (s) for typed fields + LEFT JOIN
+      // google_contact_links (l) for per-contact CRM links — all additive. Dedup:
       // contacts that share a primary_email (Gmail-collected + address-book) are
       // collapsed to one row; rows without an email key on resource_name (always
       // unique) so they are never dropped. Pagination stays on (fetched_at, id).
@@ -448,11 +466,17 @@ router.get(
       }
 
       params.push(limit + 1);
+      // A contact with no silver row yields null/[] typed fields; with no link
+      // row yields empty arrays + null status via COALESCE.
       const rows = await query(
         `WITH ranked AS (
            SELECT c.id, c.google_account_id, c.resource_name, c.etag, c.payload, c.fetched_at,
                   s.display_name, s.primary_email, s.emails, s.phones, s.organization,
                   s.job_title, s.photo_url, s.updated_at AS silver_updated_at, s.deleted,
+                  COALESCE(l.linked_org_ids, '{}') AS linked_org_ids,
+                  COALESCE(l.linked_brand_ids, '{}') AS linked_brand_ids,
+                  COALESCE(l.linked_feature_slugs, '{}') AS linked_feature_slugs,
+                  l.status AS link_status,
                   ROW_NUMBER() OVER (
                     PARTITION BY COALESCE(lower(s.primary_email), c.resource_name)
                     ORDER BY c.fetched_at DESC, c.id DESC
@@ -460,6 +484,8 @@ router.get(
              FROM google_contacts_raw c
              LEFT JOIN google_contacts_silver s
                ON s.org_id = c.org_id AND s.resource_name = c.resource_name
+             LEFT JOIN google_contact_links l
+               ON l.org_id = c.org_id AND l.resource_name = c.resource_name
              WHERE ${innerConditions.join(" AND ")}
          )
          SELECT * FROM ranked
@@ -488,6 +514,13 @@ router.get(
         photoUrl: (row.photo_url as string | null) ?? null,
         updatedAt: toIso(row.silver_updated_at),
         deleted: (row.deleted as boolean | null) ?? false,
+        // Per-contact CRM links (empty arrays + null status when no link row).
+        links: {
+          orgIds: (row.linked_org_ids as string[]) ?? [],
+          brandIds: (row.linked_brand_ids as string[]) ?? [],
+          featureSlugs: (row.linked_feature_slugs as string[]) ?? [],
+          status: (row.link_status as string | null) ?? null,
+        },
       }));
 
       const nextCursor = hasMore
@@ -517,6 +550,67 @@ const sortTs = (row: Record<string, unknown>): string => {
   if (row.sent_at instanceof Date) return row.sent_at.toISOString();
   return (row.fetched_at as Date).toISOString();
 };
+
+// ─── PUT /orgs/google/contact-links ───
+//
+// Upsert per-contact links (platform orgs/brands/features + reserved status).
+// resourceName is carried in the BODY, never the path, because Google
+// resourceNames contain "/".
+router.put(
+  "/contact-links",
+  validateBody(GoogleContactLinkPutBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const body = req.validatedBody as {
+        resourceName: string;
+        orgIds: string[];
+        brandIds: string[];
+        featureSlugs: string[];
+        status?: string | null;
+      };
+
+      const result = await query(
+        `INSERT INTO google_contact_links
+            (org_id, resource_name, linked_org_ids, linked_brand_ids, linked_feature_slugs, status, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (org_id, resource_name) DO UPDATE SET
+            linked_org_ids = EXCLUDED.linked_org_ids,
+            linked_brand_ids = EXCLUDED.linked_brand_ids,
+            linked_feature_slugs = EXCLUDED.linked_feature_slugs,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+         RETURNING resource_name, linked_org_ids, linked_brand_ids, linked_feature_slugs, status`,
+        [
+          orgId,
+          body.resourceName,
+          body.orgIds,
+          body.brandIds,
+          body.featureSlugs,
+          body.status ?? null,
+        ]
+      );
+
+      const row = result.rows[0] as {
+        resource_name: string;
+        linked_org_ids: string[];
+        linked_brand_ids: string[];
+        linked_feature_slugs: string[];
+        status: string | null;
+      };
+
+      res.json({
+        resourceName: row.resource_name,
+        orgIds: row.linked_org_ids,
+        brandIds: row.linked_brand_ids,
+        featureSlugs: row.linked_feature_slugs,
+        status: row.status,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // ─── Cursor helpers ───
 
