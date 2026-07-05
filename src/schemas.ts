@@ -303,6 +303,14 @@ export const GoogleMessageItemSchema = z.object({
   historyId: z.string(),
   payload: z.unknown(),
   fetchedAt: z.string(),
+  // Typed silver fields (additive; legacy fields incl payload preserved above).
+  fromEmail: z.string().nullable(),
+  fromName: z.string().nullable(),
+  to: z.array(z.string()),
+  subject: z.string().nullable(),
+  snippet: z.string().nullable(),
+  sentAt: z.string().nullable(),
+  labels: z.array(z.string()),
 });
 
 export const GoogleMessagesResponseSchema = z.object({
@@ -324,6 +332,16 @@ export const GoogleContactItemSchema = z.object({
   etag: z.string().nullable(),
   payload: z.unknown(),
   fetchedAt: z.string(),
+  // Typed silver fields (additive; legacy fields incl payload preserved above).
+  displayName: z.string().nullable(),
+  primaryEmail: z.string().nullable(),
+  emails: z.array(z.string()),
+  phones: z.array(z.string()),
+  organization: z.string().nullable(),
+  jobTitle: z.string().nullable(),
+  photoUrl: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+  deleted: z.boolean(),
 });
 
 export const GoogleContactsResponseSchema = z.object({

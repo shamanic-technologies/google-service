@@ -11,6 +11,11 @@ import {
   type GoogleAccountToken,
 } from "./google-tokens";
 import type { CallerContext } from "./key-service";
+import {
+  deleteContactSilver,
+  parseContactSilver,
+  upsertContactSilver,
+} from "./silver";
 
 const OTHER_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.other.readonly";
 
@@ -35,7 +40,7 @@ const upsertContact = async (
         payload = EXCLUDED.payload,
         fetched_at = NOW()
      WHERE google_contacts_raw.etag IS DISTINCT FROM EXCLUDED.etag
-     RETURNING (xmax = 0) AS inserted`,
+     RETURNING id, (xmax = 0) AS inserted`,
     [
       orgId,
       googleAccountId,
@@ -48,6 +53,19 @@ const upsertContact = async (
   if (result.rows.length === 0) {
     return "unchanged";
   }
+
+  // Silver projection: parse the bronze payload into typed columns. Only on an
+  // inserted/updated bronze row — an unchanged row already has correct silver.
+  const bronzeRowId = result.rows[0].id as string;
+  await upsertContactSilver(
+    orgId,
+    googleAccountId,
+    bronzeRowId,
+    person.resourceName,
+    person.etag ?? null,
+    parseContactSilver(person)
+  );
+
   return result.rows[0].inserted ? "inserted" : "updated";
 };
 
@@ -59,6 +77,8 @@ const deleteContact = async (
     `DELETE FROM google_contacts_raw WHERE org_id = $1 AND resource_name = $2`,
     [orgId, resourceName]
   );
+  // Keep silver in step with bronze on deletes.
+  await deleteContactSilver(orgId, resourceName);
   return (result.rowCount ?? 0) > 0;
 };
 

@@ -1416,6 +1416,38 @@
           "payload": {},
           "fetchedAt": {
             "type": "string"
+          },
+          "fromEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "fromName": {
+            "type": "string",
+            "nullable": true
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subject": {
+            "type": "string",
+            "nullable": true
+          },
+          "snippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "sentAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -1424,7 +1456,14 @@
           "gmailMessageId",
           "threadId",
           "historyId",
-          "fetchedAt"
+          "fetchedAt",
+          "fromEmail",
+          "fromName",
+          "to",
+          "subject",
+          "snippet",
+          "sentAt",
+          "labels"
         ],
         "additionalProperties": false
       },
@@ -1456,6 +1495,38 @@
                 "payload": {},
                 "fetchedAt": {
                   "type": "string"
+                },
+                "fromEmail": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "fromName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "subject": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "snippet": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "sentAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "required": [
@@ -1464,7 +1535,14 @@
                 "gmailMessageId",
                 "threadId",
                 "historyId",
-                "fetchedAt"
+                "fetchedAt",
+                "fromEmail",
+                "fromName",
+                "to",
+                "subject",
+                "snippet",
+                "sentAt",
+                "labels"
               ],
               "additionalProperties": false
             }
@@ -1501,6 +1579,45 @@
           "payload": {},
           "fetchedAt": {
             "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "primaryEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organization": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "photoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "deleted": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1508,7 +1625,16 @@
           "googleAccountId",
           "resourceName",
           "etag",
-          "fetchedAt"
+          "fetchedAt",
+          "displayName",
+          "primaryEmail",
+          "emails",
+          "phones",
+          "organization",
+          "jobTitle",
+          "photoUrl",
+          "updatedAt",
+          "deleted"
         ],
         "additionalProperties": false
       },
@@ -1538,6 +1664,45 @@
                 "payload": {},
                 "fetchedAt": {
                   "type": "string"
+                },
+                "displayName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "primaryEmail": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "emails": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "phones": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "organization": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "jobTitle": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "photoUrl": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "deleted": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -1545,7 +1710,16 @@
                 "googleAccountId",
                 "resourceName",
                 "etag",
-                "fetchedAt"
+                "fetchedAt",
+                "displayName",
+                "primaryEmail",
+                "emails",
+                "phones",
+                "organization",
+                "jobTitle",
+                "photoUrl",
+                "updatedAt",
+                "deleted"
               ],
               "additionalProperties": false
             }

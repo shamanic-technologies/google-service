@@ -12,6 +12,8 @@ import {
   type GoogleAccountToken,
 } from "./google-tokens";
 import type { CallerContext } from "./key-service";
+import type { GmailMessage } from "./google-api";
+import { parseMessageSilver, upsertMessageSilver } from "./silver";
 
 export interface GmailIngestResult {
   inserted: number;
@@ -34,7 +36,7 @@ const upsertMessage = async (
         payload = EXCLUDED.payload,
         fetched_at = NOW()
      WHERE gmail_messages_raw.history_id IS DISTINCT FROM EXCLUDED.history_id
-     RETURNING (xmax = 0) AS inserted`,
+     RETURNING id, (xmax = 0) AS inserted`,
     [
       orgId,
       googleAccountId,
@@ -48,6 +50,19 @@ const upsertMessage = async (
   if (result.rows.length === 0) {
     return "unchanged";
   }
+
+  // Silver projection: parse the bronze payload into typed columns. Only on an
+  // inserted/updated bronze row — an unchanged row already has correct silver.
+  const bronzeRowId = result.rows[0].id as string;
+  await upsertMessageSilver(
+    orgId,
+    googleAccountId,
+    bronzeRowId,
+    message.id,
+    message.threadId,
+    parseMessageSilver(message.payload as GmailMessage)
+  );
+
   return result.rows[0].inserted ? "inserted" : "updated";
 };
 

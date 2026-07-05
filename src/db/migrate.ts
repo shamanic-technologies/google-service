@@ -140,6 +140,55 @@ CREATE TABLE IF NOT EXISTS google_sync_jobs (
   finished_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_google_sync_jobs_org_started ON google_sync_jobs(org_id, started_at DESC);
+
+-- ─── Google CRM silver tables (typed projections of the bronze *_raw payloads) ───
+-- Populated at ingest (parsed from the bronze payload) and idempotently backfilled
+-- from existing bronze on boot. Bronze remains the source of truth; silver is a
+-- rebuildable view keyed on the same natural key as its bronze source.
+
+CREATE TABLE IF NOT EXISTS google_contacts_silver (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  google_account_id UUID NOT NULL REFERENCES google_oauth_tokens(id) ON DELETE CASCADE,
+  resource_name TEXT NOT NULL,
+  etag TEXT,
+  display_name TEXT,
+  primary_email TEXT,
+  emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+  phones JSONB NOT NULL DEFAULT '[]'::jsonb,
+  organization TEXT,
+  job_title TEXT,
+  photo_url TEXT,
+  updated_at TIMESTAMPTZ,
+  deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  source_row_id UUID,
+  last_rebuilt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, resource_name)
+);
+CREATE INDEX IF NOT EXISTS idx_google_contacts_silver_org ON google_contacts_silver(org_id);
+CREATE INDEX IF NOT EXISTS idx_google_contacts_silver_email ON google_contacts_silver(org_id, lower(primary_email));
+
+CREATE TABLE IF NOT EXISTS gmail_messages_silver (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  google_account_id UUID NOT NULL REFERENCES google_oauth_tokens(id) ON DELETE CASCADE,
+  gmail_message_id TEXT NOT NULL,
+  thread_id TEXT,
+  from_email TEXT,
+  from_name TEXT,
+  to_emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+  subject TEXT,
+  snippet TEXT,
+  sent_at TIMESTAMPTZ,
+  labels JSONB NOT NULL DEFAULT '[]'::jsonb,
+  history_id BIGINT,
+  source_row_id UUID,
+  last_rebuilt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, gmail_message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_org ON gmail_messages_silver(org_id);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_sent ON gmail_messages_silver(org_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_thread ON gmail_messages_silver(thread_id);
 `;
 
 export const runMigrations = async (): Promise<void> => {
