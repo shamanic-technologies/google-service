@@ -293,6 +293,7 @@ export const GoogleMessagesQuerySchema = z.object({
   cursor: z.string().optional(),
   account_id: z.string().uuid().optional(),
   thread_id: z.string().optional(),
+  participant: z.string().optional(),
 });
 
 export const GoogleMessageItemSchema = z.object({
@@ -317,6 +318,13 @@ export const GoogleContactsQuerySchema = z.object({
   query: z.string().optional(),
 });
 
+export const GoogleContactLinksSchema = z.object({
+  orgIds: z.array(z.string()),
+  brandIds: z.array(z.string()),
+  featureSlugs: z.array(z.string()),
+  status: z.string().nullable(),
+});
+
 export const GoogleContactItemSchema = z.object({
   id: z.string().uuid(),
   googleAccountId: z.string().uuid(),
@@ -324,6 +332,23 @@ export const GoogleContactItemSchema = z.object({
   etag: z.string().nullable(),
   payload: z.unknown(),
   fetchedAt: z.string(),
+  links: GoogleContactLinksSchema,
+});
+
+export const GoogleContactLinkPutBodySchema = z.object({
+  resourceName: z.string().min(1),
+  orgIds: z.array(z.string()),
+  brandIds: z.array(z.string()),
+  featureSlugs: z.array(z.string()),
+  status: z.string().nullable().optional(),
+});
+
+export const GoogleContactLinkResponseSchema = z.object({
+  resourceName: z.string(),
+  orgIds: z.array(z.string()),
+  brandIds: z.array(z.string()),
+  featureSlugs: z.array(z.string()),
+  status: z.string().nullable(),
 });
 
 export const GoogleContactsResponseSchema = z.object({
