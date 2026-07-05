@@ -86,7 +86,12 @@ export const ingestPeopleForAccount = async (
       pageToken,
       syncToken: useSyncToken && !pageToken ? account.peopleSyncToken! : undefined,
       pageSize: 1000,
-      requestSyncToken: !pageToken,
+      // Must be constant across ALL paginated pages. Google People API requires
+      // every request param except pageToken/syncToken to be identical between
+      // pages; flipping requestSyncToken from true (page 1) to false (page 2+)
+      // triggers HTTP 400 INVALID_ARGUMENT on the 2nd page. nextSyncToken still
+      // only arrives on the final page.
+      requestSyncToken: true,
     });
 
     pageToken = page.nextPageToken;
@@ -143,7 +148,12 @@ export const ingestOtherPeopleForAccount = async (
       pageToken,
       syncToken: useSyncToken && !pageToken ? account.otherContactsSyncToken! : undefined,
       pageSize: 1000,
-      requestSyncToken: !pageToken,
+      // Must be constant across ALL paginated pages. Google People API requires
+      // every request param except pageToken/syncToken to be identical between
+      // pages; flipping requestSyncToken from true (page 1) to false (page 2+)
+      // triggers HTTP 400 INVALID_ARGUMENT on the 2nd page. nextSyncToken still
+      // only arrives on the final page.
+      requestSyncToken: true,
     });
 
     pageToken = page.nextPageToken;
