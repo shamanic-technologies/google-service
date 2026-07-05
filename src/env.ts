@@ -12,6 +12,9 @@ const envSchema = z.object({
   BILLING_SERVICE_API_KEY: z.string().min(1),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_GMAIL_BACKFILL_DAYS: z.coerce.number().int().min(1).default(365),
+  // Interval (hours) between automatic background syncs of all connected
+  // Google accounts. Low-frequency by design so Neon scale-to-zero is respected.
+  GOOGLE_SYNC_INTERVAL_HOURS: z.coerce.number().min(0.1).default(6),
 });
 
 export type Env = z.infer<typeof envSchema>;
