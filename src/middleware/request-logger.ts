@@ -28,8 +28,23 @@ function isScannerRequest(path: string): boolean {
   return SCANNER_PATH_PATTERNS.some((pattern) => pattern.test(path));
 }
 
+// Endpoints that are intentionally reachable without identity headers.
+const PUBLIC_PATHS = new Set(["/health", "/openapi.json"]);
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Every authenticated route requires a valid x-org-id (see requireIdentityHeaders).
+// A request that lacks one and isn't a public path can only be an unauthenticated
+// probe (vulnerability scanners crawling /env, /aws-credentials.json, *.php, …):
+// it 400s before reaching any handler, so logging it just floods the logs.
+function isUnauthenticatedProbe(req: Request): boolean {
+  if (PUBLIC_PATHS.has(req.path)) return false;
+  const orgId = req.headers["x-org-id"];
+  return typeof orgId !== "string" || !UUID_RE.test(orgId);
+}
+
 export const requestLogger = (req: Request, res: Response, next: NextFunction): void => {
-  if (isScannerRequest(req.path)) {
+  if (isScannerRequest(req.path) || isUnauthenticatedProbe(req)) {
     next();
     return;
   }
