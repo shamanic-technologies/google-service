@@ -60,8 +60,11 @@ const spec = {
       GoogleSyncJobResponse: toSchema(schemas.GoogleSyncJobResponseSchema),
       GoogleMessageItem: toSchema(schemas.GoogleMessageItemSchema),
       GoogleMessagesResponse: toSchema(schemas.GoogleMessagesResponseSchema),
+      GoogleContactLinks: toSchema(schemas.GoogleContactLinksSchema),
       GoogleContactItem: toSchema(schemas.GoogleContactItemSchema),
       GoogleContactsResponse: toSchema(schemas.GoogleContactsResponseSchema),
+      GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
+      GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
       GoogleAccountsListResponse: toSchema(schemas.GoogleAccountsListResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
@@ -705,6 +708,7 @@ const spec = {
           { name: "cursor", in: "query", required: false, schema: { type: "string" } },
           { name: "account_id", in: "query", required: false, schema: { type: "string", format: "uuid" } },
           { name: "thread_id", in: "query", required: false, schema: { type: "string" } },
+          { name: "participant", in: "query", required: false, schema: { type: "string" }, description: "Filter to one contact's email thread: only messages where this email appears as a From/To/Cc participant. Ordered by the message's own email date (newest first)." },
         ],
         responses: {
           "200": {
@@ -739,6 +743,39 @@ const spec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/GoogleContactsResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/contact-links": {
+      put: {
+        summary: "Upsert per-contact CRM links (org/brand/feature tags + reserved status)",
+        description:
+          "Persists platform org/brand/feature links (and a reserved status) for one Google contact. resourceName is carried in the body, never the path, because Google resourceNames contain \"/\". Upserts on (org, resourceName).",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/GoogleContactLinkPutBody" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Persisted contact link",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleContactLinkResponse" },
               },
             },
           },

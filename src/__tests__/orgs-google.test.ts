@@ -571,6 +571,28 @@ describe("GET /orgs/google/messages", () => {
     const params = mockQuery.mock.calls[0][1] as unknown[];
     expect(params).toContain("tt-9");
   });
+
+  it("filters by participant email via ILIKE and orders by internalDate DESC", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app)
+      .get("/orgs/google/messages?participant=alice%40example.com")
+      .set(idHeaders);
+    const sql = mockQuery.mock.calls[0][0] as string;
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toContain("payload::text ILIKE");
+    expect(sql).toContain("(payload->>'internalDate')::bigint DESC");
+    expect(params).toContain("%alice@example.com%");
+  });
+
+  it("keeps default fetched_at ordering when participant absent", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await request(app).get("/orgs/google/messages").set(idHeaders);
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain("ORDER BY fetched_at DESC, id DESC");
+    expect(sql).not.toContain("internalDate");
+  });
 });
 
 describe("GET /orgs/google/accounts", () => {
@@ -647,6 +669,10 @@ describe("GET /orgs/google/contacts", () => {
           etag: "abc",
           payload: { names: [{ displayName: "Alice" }] },
           fetched_at: new Date(),
+          linked_org_ids: [],
+          linked_brand_ids: [],
+          linked_feature_slugs: [],
+          link_status: null,
         },
       ],
     });
@@ -654,5 +680,134 @@ describe("GET /orgs/google/contacts", () => {
     expect(res.status).toBe(200);
     expect(res.body.items[0].resourceName).toBe("people/c1");
     expect(res.body.items[0].payload.names[0].displayName).toBe("Alice");
+  });
+
+  it("LEFT JOINs contact links and returns persisted values", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: TEST_ACCOUNT_UUID,
+          google_account_id: TEST_ACCOUNT_UUID,
+          resource_name: "people/c1",
+          etag: "abc",
+          payload: { names: [{ displayName: "Alice" }] },
+          fetched_at: new Date(),
+          linked_org_ids: ["org-1", "org-2"],
+          linked_brand_ids: ["brand-9"],
+          linked_feature_slugs: ["crm"],
+          link_status: "customer",
+        },
+      ],
+    });
+    const res = await request(app).get("/orgs/google/contacts").set(idHeaders);
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain("LEFT JOIN google_contact_links");
+    expect(res.body.items[0].links).toEqual({
+      orgIds: ["org-1", "org-2"],
+      brandIds: ["brand-9"],
+      featureSlugs: ["crm"],
+      status: "customer",
+    });
+  });
+
+  it("returns empty link arrays + null status for a contact with no link row", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: TEST_ACCOUNT_UUID,
+          google_account_id: TEST_ACCOUNT_UUID,
+          resource_name: "people/c2",
+          etag: "def",
+          payload: {},
+          fetched_at: new Date(),
+          linked_org_ids: [],
+          linked_brand_ids: [],
+          linked_feature_slugs: [],
+          link_status: null,
+        },
+      ],
+    });
+    const res = await request(app).get("/orgs/google/contacts").set(idHeaders);
+    expect(res.body.items[0].links).toEqual({
+      orgIds: [],
+      brandIds: [],
+      featureSlugs: [],
+      status: null,
+    });
+  });
+});
+
+describe("PUT /orgs/google/contact-links", () => {
+  it("upserts on (org, resourceName) and round-trips the persisted row", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          resource_name: "otherContacts/c123",
+          linked_org_ids: ["org-1"],
+          linked_brand_ids: ["brand-2"],
+          linked_feature_slugs: ["crm"],
+          status: "lead",
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .put("/orgs/google/contact-links")
+      .set(idHeaders)
+      .send({
+        resourceName: "otherContacts/c123",
+        orgIds: ["org-1"],
+        brandIds: ["brand-2"],
+        featureSlugs: ["crm"],
+        status: "lead",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      resourceName: "otherContacts/c123",
+      orgIds: ["org-1"],
+      brandIds: ["brand-2"],
+      featureSlugs: ["crm"],
+      status: "lead",
+    });
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(sql).toContain("INSERT INTO google_contact_links");
+    expect(sql).toContain("ON CONFLICT (org_id, resource_name) DO UPDATE");
+    expect(params[0]).toBe(TEST_ORG_ID);
+    expect(params[1]).toBe("otherContacts/c123");
+  });
+
+  it("defaults status to null when omitted", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          resource_name: "people/c9",
+          linked_org_ids: [],
+          linked_brand_ids: [],
+          linked_feature_slugs: [],
+          status: null,
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .put("/orgs/google/contact-links")
+      .set(idHeaders)
+      .send({ resourceName: "people/c9", orgIds: [], brandIds: [], featureSlugs: [] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBeNull();
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(params[5]).toBeNull();
+  });
+
+  it("rejects missing resourceName with 400", async () => {
+    const res = await request(app)
+      .put("/orgs/google/contact-links")
+      .set(idHeaders)
+      .send({ orgIds: [], brandIds: [], featureSlugs: [] });
+    expect(res.status).toBe(400);
   });
 });

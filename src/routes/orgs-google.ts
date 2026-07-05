@@ -9,6 +9,7 @@ import {
   GoogleAuthCallbackQuerySchema,
   GoogleMessagesQuerySchema,
   GoogleContactsQuerySchema,
+  GoogleContactLinkPutBodySchema,
   GoogleSyncJobIdParamSchema,
 } from "../schemas";
 import { getGoogleOAuthClient, type CallerContext } from "../services/key-service";
@@ -353,6 +354,7 @@ router.get(
         cursor?: string;
         account_id?: string;
         thread_id?: string;
+        participant?: string;
       };
 
       const limit = q.limit ?? 50;
@@ -369,6 +371,14 @@ router.get(
         params.push(q.thread_id);
         conditions.push(`thread_id = $${params.length}`);
       }
+      // When filtering to one contact's email thread, match the participant's
+      // email anywhere in the raw message (From/To/Cc headers + body). ILIKE
+      // over the jsonb text is intentional per the bronze pattern (staff CRM,
+      // correctness over index).
+      if (q.participant) {
+        params.push(`%${q.participant}%`);
+        conditions.push(`payload::text ILIKE $${params.length}`);
+      }
       if (cursor) {
         params.push(cursor.fetchedAt);
         params.push(cursor.id);
@@ -377,12 +387,19 @@ router.get(
         );
       }
 
+      // Participant (single-thread) view is ordered by the message's own email
+      // date (Gmail internalDate, epoch ms) newest-first; the default listing
+      // stays ordered by fetched_at.
+      const orderBy = q.participant
+        ? `(payload->>'internalDate')::bigint DESC NULLS LAST, id DESC`
+        : `fetched_at DESC, id DESC`;
+
       params.push(limit + 1);
       const rows = await query(
         `SELECT id, google_account_id, gmail_message_id, thread_id, history_id, payload, fetched_at
            FROM gmail_messages_raw
            WHERE ${conditions.join(" AND ")}
-           ORDER BY fetched_at DESC, id DESC
+           ORDER BY ${orderBy}
            LIMIT $${params.length}`,
         params
       );
@@ -431,31 +448,39 @@ router.get(
       const limit = q.limit ?? 50;
       const cursor = decodeCursor(q.cursor);
 
-      const conditions: string[] = ["org_id = $1"];
+      const conditions: string[] = ["c.org_id = $1"];
       const params: unknown[] = [orgId];
 
       if (q.account_id) {
         params.push(q.account_id);
-        conditions.push(`google_account_id = $${params.length}`);
+        conditions.push(`c.google_account_id = $${params.length}`);
       }
       if (q.query) {
         params.push(`%${q.query}%`);
-        conditions.push(`payload::text ILIKE $${params.length}`);
+        conditions.push(`c.payload::text ILIKE $${params.length}`);
       }
       if (cursor) {
         params.push(cursor.fetchedAt);
         params.push(cursor.id);
         conditions.push(
-          `(fetched_at, id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
+          `(c.fetched_at, c.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`
         );
       }
 
       params.push(limit + 1);
+      // LEFT JOIN persisted per-contact links; a contact with no link row
+      // yields empty arrays + null status via COALESCE.
       const rows = await query(
-        `SELECT id, google_account_id, resource_name, etag, payload, fetched_at
-           FROM google_contacts_raw
+        `SELECT c.id, c.google_account_id, c.resource_name, c.etag, c.payload, c.fetched_at,
+                COALESCE(l.linked_org_ids, '{}') AS linked_org_ids,
+                COALESCE(l.linked_brand_ids, '{}') AS linked_brand_ids,
+                COALESCE(l.linked_feature_slugs, '{}') AS linked_feature_slugs,
+                l.status AS link_status
+           FROM google_contacts_raw c
+           LEFT JOIN google_contact_links l
+             ON l.org_id = c.org_id AND l.resource_name = c.resource_name
            WHERE ${conditions.join(" AND ")}
-           ORDER BY fetched_at DESC, id DESC
+           ORDER BY c.fetched_at DESC, c.id DESC
            LIMIT $${params.length}`,
         params
       );
@@ -469,6 +494,12 @@ router.get(
         etag: (row.etag as string | null) ?? null,
         payload: row.payload,
         fetchedAt: (row.fetched_at as Date).toISOString(),
+        links: {
+          orgIds: (row.linked_org_ids as string[]) ?? [],
+          brandIds: (row.linked_brand_ids as string[]) ?? [],
+          featureSlugs: (row.linked_feature_slugs as string[]) ?? [],
+          status: (row.link_status as string | null) ?? null,
+        },
       }));
 
       const nextCursor = hasMore
@@ -479,6 +510,67 @@ router.get(
         : null;
 
       res.json({ items, nextCursor });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── PUT /orgs/google/contact-links ───
+//
+// Upsert per-contact links (platform orgs/brands/features + reserved status).
+// resourceName is carried in the BODY, never the path, because Google
+// resourceNames contain "/".
+router.put(
+  "/contact-links",
+  validateBody(GoogleContactLinkPutBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const body = req.validatedBody as {
+        resourceName: string;
+        orgIds: string[];
+        brandIds: string[];
+        featureSlugs: string[];
+        status?: string | null;
+      };
+
+      const result = await query(
+        `INSERT INTO google_contact_links
+            (org_id, resource_name, linked_org_ids, linked_brand_ids, linked_feature_slugs, status, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (org_id, resource_name) DO UPDATE SET
+            linked_org_ids = EXCLUDED.linked_org_ids,
+            linked_brand_ids = EXCLUDED.linked_brand_ids,
+            linked_feature_slugs = EXCLUDED.linked_feature_slugs,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+         RETURNING resource_name, linked_org_ids, linked_brand_ids, linked_feature_slugs, status`,
+        [
+          orgId,
+          body.resourceName,
+          body.orgIds,
+          body.brandIds,
+          body.featureSlugs,
+          body.status ?? null,
+        ]
+      );
+
+      const row = result.rows[0] as {
+        resource_name: string;
+        linked_org_ids: string[];
+        linked_brand_ids: string[];
+        linked_feature_slugs: string[];
+        status: string | null;
+      };
+
+      res.json({
+        resourceName: row.resource_name,
+        orgIds: row.linked_org_ids,
+        brandIds: row.linked_brand_ids,
+        featureSlugs: row.linked_feature_slugs,
+        status: row.status,
+      });
     } catch (err) {
       next(err);
     }
