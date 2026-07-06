@@ -1,10 +1,13 @@
 import { query } from "../db/client";
 import {
+  isExpiredSyncTokenError,
   listOtherContacts,
   listPeopleConnections,
   type PersonResource,
 } from "./google-api";
 import {
+  clearOtherContactsSyncToken,
+  clearPeopleSyncToken,
   ensureFreshAccessToken,
   updateOtherContactsSyncToken,
   updatePeopleSyncToken,
@@ -95,16 +98,39 @@ export const ingestPeopleForAccount = async (
   brandId: string | undefined
 ): Promise<PeopleIngestResult> => {
   const accessToken = await ensureFreshAccessToken(account, caller, runId, featureSlug, brandId);
+
+  try {
+    return await runPeopleConnections(account, accessToken, account.peopleSyncToken);
+  } catch (err) {
+    // Google People expires syncTokens; the documented recovery is to drop the
+    // token and re-list in full. Clear it so future syncs also start clean, then
+    // retry once from scratch (no syncToken).
+    if (isExpiredSyncTokenError(err) && account.peopleSyncToken) {
+      await clearPeopleSyncToken(account.orgId, account.id);
+      console.warn(
+        `[google-service] people syncToken expired for account ${account.id} (org=${account.orgId}); cleared token, running full connections list`
+      );
+      return runPeopleConnections(account, accessToken, null);
+    }
+    throw err;
+  }
+};
+
+const runPeopleConnections = async (
+  account: GoogleAccountToken,
+  accessToken: string,
+  syncTokenToUse: string | null
+): Promise<PeopleIngestResult> => {
   const result: PeopleIngestResult = { inserted: 0, updated: 0, unchanged: 0, deleted: 0 };
 
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
-  const useSyncToken = !!account.peopleSyncToken;
+  const useSyncToken = !!syncTokenToUse;
 
   do {
     const page = await listPeopleConnections(accessToken, {
       pageToken,
-      syncToken: useSyncToken && !pageToken ? account.peopleSyncToken! : undefined,
+      syncToken: useSyncToken && !pageToken ? syncTokenToUse! : undefined,
       pageSize: 1000,
       // Must be constant across ALL paginated pages. Google People API requires
       // every request param except pageToken/syncToken to be identical between
@@ -159,14 +185,36 @@ export const ingestOtherPeopleForAccount = async (
 
   const accessToken = await ensureFreshAccessToken(account, caller, runId, featureSlug, brandId);
 
+  try {
+    return await runOtherContacts(account, accessToken, account.otherContactsSyncToken);
+  } catch (err) {
+    // Same expired-syncToken recovery as people connections: clear + re-list full.
+    if (isExpiredSyncTokenError(err) && account.otherContactsSyncToken) {
+      await clearOtherContactsSyncToken(account.orgId, account.id);
+      console.warn(
+        `[google-service] otherContacts syncToken expired for account ${account.id} (org=${account.orgId}); cleared token, running full otherContacts list`
+      );
+      return runOtherContacts(account, accessToken, null);
+    }
+    throw err;
+  }
+};
+
+const runOtherContacts = async (
+  account: GoogleAccountToken,
+  accessToken: string,
+  syncTokenToUse: string | null
+): Promise<PeopleIngestResult> => {
+  const result: PeopleIngestResult = { inserted: 0, updated: 0, unchanged: 0, deleted: 0 };
+
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
-  const useSyncToken = !!account.otherContactsSyncToken;
+  const useSyncToken = !!syncTokenToUse;
 
   do {
     const page = await listOtherContacts(accessToken, {
       pageToken,
-      syncToken: useSyncToken && !pageToken ? account.otherContactsSyncToken! : undefined,
+      syncToken: useSyncToken && !pageToken ? syncTokenToUse! : undefined,
       pageSize: 1000,
       // Must be constant across ALL paginated pages. Google People API requires
       // every request param except pageToken/syncToken to be identical between

@@ -145,6 +145,30 @@ export const updateOtherContactsSyncToken = async (
   );
 };
 
+export const clearPeopleSyncToken = async (
+  orgId: string,
+  id: string
+): Promise<void> => {
+  await query(
+    `UPDATE google_oauth_tokens
+       SET people_sync_token = NULL, updated_at = NOW()
+       WHERE org_id = $1 AND id = $2`,
+    [orgId, id]
+  );
+};
+
+export const clearOtherContactsSyncToken = async (
+  orgId: string,
+  id: string
+): Promise<void> => {
+  await query(
+    `UPDATE google_oauth_tokens
+       SET other_contacts_sync_token = NULL, updated_at = NOW()
+       WHERE org_id = $1 AND id = $2`,
+    [orgId, id]
+  );
+};
+
 export const updateAccessToken = async (
   orgId: string,
   id: string,
@@ -183,4 +207,54 @@ export const ensureFreshAccessToken = async (
   const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
   await updateAccessToken(account.orgId, account.id, refreshed.access_token, expiresAt);
   return refreshed.access_token;
+};
+
+// A stateful access-token accessor for a long-running ingest loop. Unlike
+// ensureFreshAccessToken (mints once, returns a bare string), this caches the
+// current token + expiry and can re-mint on demand — either lazily when the
+// cached token is near expiry (get) or eagerly after a 401 (forceRefresh). A
+// backfill of a large mailbox exceeds the ~1h token TTL, so the token MUST be
+// refreshable mid-loop rather than captured once at the top.
+export interface AccessTokenProvider {
+  get(): Promise<string>;
+  forceRefresh(): Promise<string>;
+}
+
+export const createAccessTokenProvider = (
+  account: GoogleAccountToken,
+  caller: CallerContext,
+  runId?: string,
+  featureSlug?: string,
+  brandId?: string
+): AccessTokenProvider => {
+  let current = account.accessToken;
+  let expiresAt = account.accessTokenExpiresAt;
+
+  const refresh = async (): Promise<string> => {
+    const oauth = await getGoogleOAuthClient(caller, runId, featureSlug, brandId);
+    const refreshed = await refreshAccessToken({
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecret,
+      refreshToken: account.refreshToken,
+    });
+    const exp = new Date(Date.now() + refreshed.expires_in * 1000);
+    await updateAccessToken(account.orgId, account.id, refreshed.access_token, exp);
+    current = refreshed.access_token;
+    expiresAt = exp;
+    return refreshed.access_token;
+  };
+
+  return {
+    async get() {
+      if (
+        current &&
+        expiresAt &&
+        expiresAt.getTime() - Date.now() > ACCESS_TOKEN_LEEWAY_MS
+      ) {
+        return current;
+      }
+      return refresh();
+    },
+    forceRefresh: refresh,
+  };
 };

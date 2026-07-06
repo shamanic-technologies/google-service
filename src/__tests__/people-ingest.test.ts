@@ -5,11 +5,13 @@ const {
   mockListOtherContacts,
   mockEnsureFreshAccessToken,
   mockUpdateOtherContactsSyncToken,
+  mockClearOtherContactsSyncToken,
 } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
   mockListOtherContacts: vi.fn(),
   mockEnsureFreshAccessToken: vi.fn(),
   mockUpdateOtherContactsSyncToken: vi.fn(),
+  mockClearOtherContactsSyncToken: vi.fn(),
 }));
 
 vi.mock("../env", () => ({
@@ -48,10 +50,13 @@ vi.mock("../services/google-tokens", async () => {
     ensureFreshAccessToken: (...args: unknown[]) => mockEnsureFreshAccessToken(...args),
     updateOtherContactsSyncToken: (...args: unknown[]) =>
       mockUpdateOtherContactsSyncToken(...args),
+    clearOtherContactsSyncToken: (...args: unknown[]) =>
+      mockClearOtherContactsSyncToken(...args),
   };
 });
 
 import { ingestOtherPeopleForAccount } from "../services/people-ingest";
+import { GoogleApiError } from "../services/google-api";
 import type { GoogleAccountToken } from "../services/google-tokens";
 
 const TEST_ORG_ID = "00000000-0000-4000-a000-000000000001";
@@ -81,6 +86,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockEnsureFreshAccessToken.mockResolvedValue("fresh-access-token");
   mockUpdateOtherContactsSyncToken.mockResolvedValue(undefined);
+  mockClearOtherContactsSyncToken.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -240,5 +246,70 @@ describe("ingestOtherPeopleForAccount", () => {
         requestSyncToken: true,
       })
     );
+  });
+
+  it("expired sync token: clears stored token and retries a full list once", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // First list (with the stored syncToken) fails EXPIRED_SYNC_TOKEN; the full
+    // re-list (no syncToken) then succeeds.
+    mockListOtherContacts
+      .mockRejectedValueOnce(
+        new GoogleApiError(
+          400,
+          "https://people/otherContacts",
+          '{"error":{"status":"FAILED_PRECONDITION","message":"Sync token is expired.","details":[{"reason":"EXPIRED_SYNC_TOKEN"}]}}'
+        )
+      )
+      .mockResolvedValueOnce({
+        otherContacts: [{ resourceName: "otherContacts/c1", etag: "e1" }],
+        nextSyncToken: "fresh-tok",
+      });
+    mockQuery.mockResolvedValue({ rows: [{ inserted: true }], rowCount: 1 });
+
+    const result = await ingestOtherPeopleForAccount(
+      makeAccount({ otherContactsSyncToken: "stale-tok" }),
+      caller,
+      TEST_RUN_ID,
+      undefined,
+      undefined
+    );
+
+    expect(result.inserted).toBe(1);
+    expect(mockClearOtherContactsSyncToken).toHaveBeenCalledWith(
+      TEST_ORG_ID,
+      TEST_ACCOUNT_ID
+    );
+    expect(mockListOtherContacts).toHaveBeenCalledTimes(2);
+    // Retry #2 runs a FULL list — no syncToken.
+    expect(mockListOtherContacts.mock.calls[1][1]).toMatchObject({
+      syncToken: undefined,
+      requestSyncToken: true,
+    });
+    // The fresh sync token from the recovered full list is persisted.
+    expect(mockUpdateOtherContactsSyncToken).toHaveBeenCalledWith(
+      TEST_ORG_ID,
+      TEST_ACCOUNT_ID,
+      "fresh-tok"
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("non-expired 400 error propagates (no clear, no retry)", async () => {
+    mockListOtherContacts.mockRejectedValueOnce(
+      new GoogleApiError(400, "https://people/otherContacts", "INVALID_ARGUMENT")
+    );
+
+    await expect(
+      ingestOtherPeopleForAccount(
+        makeAccount({ otherContactsSyncToken: "stale-tok" }),
+        caller,
+        TEST_RUN_ID,
+        undefined,
+        undefined
+      )
+    ).rejects.toThrow(/400/);
+
+    expect(mockClearOtherContactsSyncToken).not.toHaveBeenCalled();
+    expect(mockListOtherContacts).toHaveBeenCalledTimes(1);
   });
 });
