@@ -98,6 +98,12 @@ The detached promise updates the row to `succeeded` (with `summary` jsonb) or `f
 
 **Restart caveat (v1 trade-off)** — there is no queue and no worker. If the Railway service restarts mid-sync, the row stays `running` forever. Acceptable while sync is user-driven (the user can simply re-click sync); revisit when sync becomes scheduled or volume grows. The next iteration is `pgmq` with a reaper that flips long-stale `running` rows to `failed`.
 
+**Large-mailbox reliability (do NOT regress) — a Gmail access token lives ~1h; a full backfill of a 15k+ message mailbox fetches one message at a time and EXCEEDS that window.** So the ingest loop MUST NOT mint one access token at the top and thread it through the loop (that was the original bug: every fetch past the hour 401'd → the whole job threw → `gmail_history_id` never persisted → next sync ran a full backfill from scratch → infinite full-rescan, 0 successful syncs ever). Invariants, all in `gmail-ingest.ts` / `people-ingest.ts` / `google-tokens.ts`:
+- Thread an `AccessTokenProvider` (`createAccessTokenProvider`), never a bare token string. Every Google call runs through `withTokenRetry(provider, t => …)` which lazily re-mints on near-expiry and **force-refreshes + retries once on a 401**.
+- Backfill is **resumable**: load the `gmail_message_id`s already in bronze and skip them before the per-message `getMessage`, so an interrupted run converges instead of re-scanning from zero. `gmail_history_id` is persisted only on successful completion (captured pre-loop) → next sync is a delta.
+- Google People expires syncTokens: on `GoogleApiError` `400` with body `EXPIRED_SYNC_TOKEN` (`isExpiredSyncTokenError`), clear the stored sync token and retry a full list once. Applies to BOTH `people_sync_token` and `other_contacts_sync_token`.
+- Match Google failures on `GoogleApiError.status`, never `.message.includes("…")` substrings.
+
 ### Future gold / canonical-Human trigger
 
 Silver (`google_contacts_silver` / `gmail_messages_silver`) exists (see Data layering above). Promote further — a canonical `Human` entity or a materialized gold table — only when one of:
