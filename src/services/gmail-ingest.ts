@@ -1,14 +1,17 @@
 import { query } from "../db/client";
 import { env } from "../env";
 import {
+  GoogleApiError,
   getGmailMessage,
   getGmailProfile,
   listGmailHistory,
   listGmailMessages,
+  withTokenRetry,
 } from "./google-api";
 import {
-  ensureFreshAccessToken,
+  createAccessTokenProvider,
   updateGmailHistoryId,
+  type AccessTokenProvider,
   type GoogleAccountToken,
 } from "./google-tokens";
 import type { CallerContext } from "./key-service";
@@ -73,25 +76,29 @@ export const ingestGmailForAccount = async (
   featureSlug: string | undefined,
   brandId: string | undefined
 ): Promise<GmailIngestResult> => {
-  const accessToken = await ensureFreshAccessToken(account, caller, runId, featureSlug, brandId);
+  const provider = createAccessTokenProvider(account, caller, runId, featureSlug, brandId);
   const result: GmailIngestResult = { inserted: 0, updated: 0, unchanged: 0 };
 
-  const profile = await getGmailProfile(accessToken);
+  const profile = await withTokenRetry(provider, (t) => getGmailProfile(t));
   const latestHistoryId = profile.historyId;
 
   if (account.gmailHistoryId) {
-    await ingestDelta(account, accessToken, result);
+    await ingestDelta(account, provider, result);
   } else {
-    await ingestBackfill(account, accessToken, result);
+    await ingestBackfill(account, provider, result);
   }
 
+  // Persist the pre-loop historyId so the NEXT sync runs a cheap delta instead
+  // of a full backfill. Captured before the loop so any message that arrives
+  // during a long backfill is still covered by the next delta (idempotent
+  // re-fetch at worst). Only reached when the loop completes without throwing.
   await updateGmailHistoryId(account.orgId, account.id, latestHistoryId);
   return result;
 };
 
 const ingestBackfill = async (
   account: GoogleAccountToken,
-  accessToken: string,
+  provider: AccessTokenProvider,
   result: GmailIngestResult
 ): Promise<void> => {
   const after = Math.floor(
@@ -99,13 +106,33 @@ const ingestBackfill = async (
   );
   const q = `after:${after}`;
 
+  // Resumability: a full backfill of a large mailbox may be interrupted (Railway
+  // restart) before it completes and persists gmail_history_id. Load the ids we
+  // already stored so a resumed run skips the expensive per-message getMessage
+  // fetch for everything already ingested — the loop converges instead of
+  // re-scanning the whole mailbox from zero on every run.
+  const existing = await query(
+    `SELECT gmail_message_id FROM gmail_messages_raw
+       WHERE org_id = $1 AND google_account_id = $2`,
+    [account.orgId, account.id]
+  );
+  const alreadyStored = new Set<string>(
+    existing.rows.map((r) => r.gmail_message_id as string)
+  );
+
   let pageToken: string | undefined;
   do {
-    const page = await listGmailMessages(accessToken, { q, pageToken, maxResults: 100 });
+    const page = await withTokenRetry(provider, (t) =>
+      listGmailMessages(t, { q, pageToken, maxResults: 100 })
+    );
     pageToken = page.nextPageToken;
     if (!page.messages) continue;
     for (const ref of page.messages) {
-      const full = await getGmailMessage(accessToken, ref.id);
+      if (alreadyStored.has(ref.id)) {
+        result.unchanged += 1;
+        continue;
+      }
+      const full = await withTokenRetry(provider, (t) => getGmailMessage(t, ref.id));
       const outcome = await upsertMessage(account.orgId, account.id, {
         id: full.id,
         threadId: full.threadId,
@@ -113,22 +140,25 @@ const ingestBackfill = async (
         payload: full,
       });
       result[outcome] += 1;
+      alreadyStored.add(ref.id);
     }
   } while (pageToken);
 };
 
 const ingestDelta = async (
   account: GoogleAccountToken,
-  accessToken: string,
+  provider: AccessTokenProvider,
   result: GmailIngestResult
 ): Promise<void> => {
   let pageToken: string | undefined;
   const seen = new Set<string>();
   do {
-    const page = await listGmailHistory(accessToken, {
-      startHistoryId: account.gmailHistoryId!,
-      pageToken,
-    });
+    const page = await withTokenRetry(provider, (t) =>
+      listGmailHistory(t, {
+        startHistoryId: account.gmailHistoryId!,
+        pageToken,
+      })
+    );
     pageToken = page.nextPageToken;
     if (!page.history) continue;
     for (const item of page.history) {
@@ -137,7 +167,9 @@ const ingestDelta = async (
         if (seen.has(wrap.message.id)) continue;
         seen.add(wrap.message.id);
         try {
-          const full = await getGmailMessage(accessToken, wrap.message.id);
+          const full = await withTokenRetry(provider, (t) =>
+            getGmailMessage(t, wrap.message.id)
+          );
           const outcome = await upsertMessage(account.orgId, account.id, {
             id: full.id,
             threadId: full.threadId,
@@ -146,7 +178,7 @@ const ingestDelta = async (
           });
           result[outcome] += 1;
         } catch (err) {
-          if ((err as Error).message.includes("404")) continue;
+          if (err instanceof GoogleApiError && err.status === 404) continue;
           throw err;
         }
       }
