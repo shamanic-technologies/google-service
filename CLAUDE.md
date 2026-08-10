@@ -14,9 +14,9 @@ Inbound `x-run-id` (required), `x-feature-slug`, `x-brand-id`, **`x-audience-id`
 
 ## Stack
 
-See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Supertest, Railway).
+See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Supertest). Deploys: the service runs as a Docker container on the Hetzner box, redeployed by a 5-minute cron that runs `./deploy.sh --all` with a health check and automatic rollback. Env vars live in `/root/distribute/env/google.env` on the box, not in a hosting-provider dashboard (Railway is gone).
 
-**Package manager: npm.** Lockfile is `package-lock.json`; the Dockerfile runs `npm ci`. Use `npm install` / `npm test` / `npm run build` locally. Do NOT run `pnpm install` here — it creates a stray `pnpm-lock.yaml` that diverges from the lockfile Railway actually reads.
+**Package manager: npm.** Lockfile is `package-lock.json`; the Dockerfile runs `npm ci`. Use `npm install` / `npm test` / `npm run build` locally. Do NOT run `pnpm install` here — it creates a stray `pnpm-lock.yaml` that diverges from the lockfile the Docker build actually reads.
 
 ## OAuth client credentials
 
@@ -26,7 +26,7 @@ Business logic must call `getGoogleOAuthClient()` in `src/services/key-service.t
 
 ## Migrations
 
-`src/db/migrate.ts` exports `runMigrations()` which is awaited from `src/index.ts` **before** `app.listen()`. Every Railway deploy runs the migration; missing tables block startup so a bad migration triggers Railway's restart loop loudly instead of serving 500s.
+`src/db/migrate.ts` exports `runMigrations()` which is awaited from `src/index.ts` **before** `app.listen()`. Every deploy runs the migration; missing tables block startup, so a bad migration fails the deploy health check and gets rolled back loudly instead of serving 500s.
 
 Schema changes: edit the inline `migration` SQL in `src/db/migrate.ts`. Use `CREATE TABLE IF NOT EXISTS` / `DO $$ ... IF NOT EXISTS ... END $$` so the same migration runs cleanly on every boot.
 
@@ -48,7 +48,7 @@ Bronze stays the source of truth; silver is a rebuildable view. Contact silver c
 
 ### Cron auto-sync
 
-`src/services/cron-sync.ts` `startAutoSync()` (scheduled from `index.ts` after listen) runs `syncOrg` for every distinct org in `google_oauth_tokens` every `GOOGLE_SYNC_INTERVAL_HOURS` (default 6). First tick fires after one interval (no boot-storm). Low-frequency by design so Neon scale-to-zero stays effective — no high-frequency DB-ping loop; a fresh pool connection per query. Google People/Gmail calls use the user's own OAuth token (no metered platform cost → no cost declaration). `src/services/sync.ts` `syncOrg` is the shared core used by both the async HTTP sync job and the cron.
+`src/services/cron-sync.ts` `startAutoSync()` (scheduled from `index.ts` after listen) runs `syncOrg` for every distinct org in `google_oauth_tokens` every `GOOGLE_SYNC_INTERVAL_HOURS` (default 6). First tick fires after one interval (no boot-storm). Low-frequency by design — keep it that way: a high-frequency loop would do no work anyone asked for beyond what a 6-hourly sync already covers, and the long-lived idle connections it holds are exactly the sockets that get closed underneath you and throw. Take a fresh pool connection per query; never add a timer whose only job is to touch the DB. (The original reason written here was Neon scale-to-zero. Neon is gone — every DB is now one Postgres container on the Hetzner box, which does not autosuspend — but the rule stands on its own.) Google People/Gmail calls use the user's own OAuth token (no metered platform cost → no cost declaration). `src/services/sync.ts` `syncOrg` is the shared core used by both the async HTTP sync job and the cron.
 
 ### Bronze tables
 
@@ -94,9 +94,9 @@ Append-only is preserved in spirit: we never mutate audit metadata; we only refr
 
 The detached promise updates the row to `succeeded` (with `summary` jsonb) or `failed` (with `error` text) once Gmail + People (`connections.list` + `otherContacts.list`) ingest finishes. Callers poll `GET /orgs/google/sync/{jobId}` until `status != 'running'`. People connections (address book) and otherContacts (Gmail-collected) results are summed into a single `summary.contacts` accumulator — the UI does not distinguish the two sources. Tokens minted before the `contacts.other.readonly` scope was added skip the `otherContacts.list` call with a `console.warn`; the user must reauth to receive Gmail-collected contacts.
 
-**Why async** — the dashboard's Vercel proxy caps function invocations at 300 s (Pro plan). First-sync backfills against busy mailboxes blew past that and surfaced as `FUNCTION_INVOCATION_TIMEOUT sin1::...`. Returning 202 keeps the proxy round-trip well under the cap regardless of mailbox size.
+**Why async** — the dashboard was on Vercel at the time, whose proxy capped function invocations at 300 s (Pro plan). First-sync backfills against busy mailboxes blew past that and surfaced as `FUNCTION_INVOCATION_TIMEOUT sin1::...`. The dashboard has since moved off Vercel, but the 202 design stays: it keeps the proxy round-trip short regardless of mailbox size, and a multi-minute request is fragile under any proxy or deploy restart.
 
-**Restart caveat (v1 trade-off)** — there is no queue and no worker. If the Railway service restarts mid-sync, the row stays `running` forever. Acceptable while sync is user-driven (the user can simply re-click sync); revisit when sync becomes scheduled or volume grows. The next iteration is `pgmq` with a reaper that flips long-stale `running` rows to `failed`.
+**Restart caveat (v1 trade-off)** — there is no queue and no worker. If the service container restarts mid-sync (deploy cron, box restart), the row stays `running` forever. Acceptable while sync is user-driven (the user can simply re-click sync); revisit when sync becomes scheduled or volume grows. The next iteration is `pgmq` with a reaper that flips long-stale `running` rows to `failed`.
 
 **Large-mailbox reliability (do NOT regress) — a Gmail access token lives ~1h; a full backfill of a 15k+ message mailbox fetches one message at a time and EXCEEDS that window.** So the ingest loop MUST NOT mint one access token at the top and thread it through the loop (that was the original bug: every fetch past the hour 401'd → the whole job threw → `gmail_history_id` never persisted → next sync ran a full backfill from scratch → infinite full-rescan, 0 successful syncs ever). Invariants, all in `gmail-ingest.ts` / `people-ingest.ts` / `google-tokens.ts`:
 - Thread an `AccessTokenProvider` (`createAccessTokenProvider`), never a bare token string. Every Google call runs through `withTokenRetry(provider, t => …)` which lazily re-mints on near-expiry and **force-refreshes + retries once on a 401**.
