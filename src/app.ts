@@ -3,6 +3,7 @@ import healthRoutes from "./routes/health";
 import authRoutes from "./routes/auth";
 import accountsRoutes from "./routes/accounts";
 import campaignsRoutes from "./routes/campaigns";
+import servingRoutes from "./routes/serving";
 import searchRoutes from "./routes/search";
 import orgsGoogleRoutes from "./routes/orgs-google";
 import { errorHandler } from "./middleware/error-handler";
@@ -37,6 +38,7 @@ export const createApp = () => {
   app.use(authRoutes);
   app.use(accountsRoutes);
   app.use(campaignsRoutes);
+  app.use(servingRoutes);
   app.use(searchRoutes);
   app.use("/orgs/google", orgsGoogleRoutes);
 

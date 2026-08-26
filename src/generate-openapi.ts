@@ -6,6 +6,242 @@ import * as schemas from "./schemas";
 const toSchema = (zodSchema: Parameters<typeof zodToJsonSchema>[0]) =>
   zodToJsonSchema(zodSchema, { target: "openApi3" });
 
+// ─── Serving stack paths (ad groups, keywords, negatives, ads, bidding) ───
+// Everything below the campaign, plus the managed advertiser account and the
+// live bidding switch. Identity headers are the same on every route.
+
+const identityParams = [
+  { $ref: "#/components/parameters/OrgId" },
+  { $ref: "#/components/parameters/UserId" },
+  { $ref: "#/components/parameters/RunId" },
+  { $ref: "#/components/parameters/FeatureSlug" },
+  { $ref: "#/components/parameters/BrandId" },
+  { $ref: "#/components/parameters/AudienceId" },
+];
+
+const pathParam = (name: string) => ({
+  name,
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+});
+
+const jsonBody = (ref: string) => ({
+  required: true,
+  content: { "application/json": { schema: { $ref: `#/components/schemas/${ref}` } } },
+});
+
+const jsonResponse = (description: string, ref?: string) => ({
+  description,
+  ...(ref
+    ? { content: { "application/json": { schema: { $ref: `#/components/schemas/${ref}` } } } }
+    : {}),
+});
+
+const servingPaths = {
+  "/accounts/{accountId}/campaigns/{campaignId}/ad-groups": {
+    post: {
+      summary: "Create an ad group under a campaign",
+      description:
+        "The grouping level beneath a campaign. A Search campaign with no ad group serves zero impressions.",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      requestBody: jsonBody("CreateAdGroupBody"),
+      responses: {
+        "201": jsonResponse("Ad group created"),
+        "404": jsonResponse("Org owns no such account"),
+        "502": jsonResponse("Google rejected the request"),
+      },
+    },
+    get: {
+      summary: "List the campaign's ad groups",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      responses: { "200": jsonResponse("Ad groups", "AdGroupsResponse") },
+    },
+  },
+  "/accounts/{accountId}/ad-groups/{adGroupId}": {
+    patch: {
+      summary: "Update an ad group (name, status, default bid)",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      requestBody: jsonBody("UpdateAdGroupBody"),
+      responses: { "200": jsonResponse("Updated ad group") },
+    },
+  },
+  "/accounts/{accountId}/ad-groups/{adGroupId}/keywords": {
+    post: {
+      summary: "Add the search terms the ad group bids on",
+      description: "Each keyword carries its match behaviour (EXACT, PHRASE, BROAD).",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      requestBody: jsonBody("AddKeywordsBody"),
+      responses: {
+        "201": jsonResponse("Keywords created", "CreatedCriteriaResponse"),
+        "502": jsonResponse("Google rejected the request"),
+      },
+    },
+    get: {
+      summary: "List the ad group's keywords",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      responses: { "200": jsonResponse("Keywords", "KeywordsResponse") },
+    },
+  },
+  "/accounts/{accountId}/ad-groups/{adGroupId}/keywords/{criterionId}": {
+    patch: {
+      summary: "Pause or enable one keyword",
+      parameters: [
+        ...identityParams,
+        pathParam("accountId"),
+        pathParam("adGroupId"),
+        pathParam("criterionId"),
+      ],
+      requestBody: jsonBody("UpdateKeywordBody"),
+      responses: { "200": jsonResponse("Keyword updated") },
+    },
+    delete: {
+      summary: "Remove one keyword",
+      parameters: [
+        ...identityParams,
+        pathParam("accountId"),
+        pathParam("adGroupId"),
+        pathParam("criterionId"),
+      ],
+      responses: { "200": jsonResponse("Keyword removed") },
+    },
+  },
+  "/accounts/{accountId}/ad-groups/{adGroupId}/negative-keywords": {
+    post: {
+      summary: "Add terms this ad group must never bid on",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      requestBody: jsonBody("AddNegativeKeywordsBody"),
+      responses: { "201": jsonResponse("Negative keywords created", "CreatedCriteriaResponse") },
+    },
+    get: {
+      summary: "List the ad group's negative keywords",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      responses: { "200": jsonResponse("Negative keywords", "KeywordsResponse") },
+    },
+  },
+  "/accounts/{accountId}/campaigns/{campaignId}/negative-keywords": {
+    post: {
+      summary: "Add terms the whole campaign must never bid on",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      requestBody: jsonBody("AddNegativeKeywordsBody"),
+      responses: { "201": jsonResponse("Negative keywords created", "CreatedCriteriaResponse") },
+    },
+    get: {
+      summary: "List the campaign's negative keywords",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      responses: {
+        "200": jsonResponse("Negative keywords", "CampaignNegativeKeywordsResponse"),
+      },
+    },
+  },
+  "/accounts/{accountId}/campaigns/{campaignId}/negative-keywords/{criterionId}": {
+    delete: {
+      summary: "Remove one campaign-level negative keyword",
+      parameters: [
+        ...identityParams,
+        pathParam("accountId"),
+        pathParam("campaignId"),
+        pathParam("criterionId"),
+      ],
+      responses: { "200": jsonResponse("Negative keyword removed") },
+    },
+  },
+  "/accounts/{accountId}/ad-groups/{adGroupId}/ads": {
+    post: {
+      summary: "Create the responsive search ad",
+      description:
+        "Google composes the ad at serve time from the headline and description variants that exist, so choosing the variants IS writing the ad. A variant may be pinned to a fixed position (compliance or brand lines) while the rest stay free for Google to test.",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      requestBody: jsonBody("CreateResponsiveSearchAdBody"),
+      responses: {
+        "201": jsonResponse("Ad created"),
+        "502": jsonResponse("Google rejected the ad (including a policy refusal)"),
+      },
+    },
+    get: {
+      summary: "List the ad group's responsive search ads",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("adGroupId")],
+      responses: { "200": jsonResponse("Ads", "AdsResponse") },
+    },
+  },
+  "/accounts/{accountId}/ad-groups/{adGroupId}/ads/{adId}": {
+    patch: {
+      summary: "Pause or enable one ad",
+      parameters: [
+        ...identityParams,
+        pathParam("accountId"),
+        pathParam("adGroupId"),
+        pathParam("adId"),
+      ],
+      requestBody: jsonBody("UpdateAdBody"),
+      responses: { "200": jsonResponse("Ad updated") },
+    },
+    delete: {
+      summary: "Remove one ad",
+      parameters: [
+        ...identityParams,
+        pathParam("accountId"),
+        pathParam("adGroupId"),
+        pathParam("adId"),
+      ],
+      responses: { "200": jsonResponse("Ad removed") },
+    },
+  },
+  "/accounts/{accountId}/campaigns/{campaignId}/bidding": {
+    put: {
+      summary: "Change the bidding approach on a live campaign",
+      description:
+        "A new campaign launches click-based or manual because it has no conversion history, and graduates to conversion-based bidding once conversions have accrued. The campaign is never recreated: it keeps its id, its structure and its history.",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      requestBody: jsonBody("UpdateBiddingBody"),
+      responses: {
+        "200": jsonResponse("Bidding strategy changed"),
+        "502": jsonResponse("Google rejected the change"),
+      },
+    },
+  },
+  "/accounts/{accountId}/campaigns/{campaignId}/structure": {
+    get: {
+      summary: "Read back everything created for this campaign",
+      description:
+        "Campaign serving state plus every ad group with its keywords, negatives and ads — so a later run can adjust what exists instead of duplicating it.",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      responses: {
+        "200": jsonResponse("Campaign structure", "CampaignStructureResponse"),
+      },
+    },
+  },
+  "/accounts/{accountId}/campaigns/{campaignId}/serving-state": {
+    get: {
+      summary: "Google's own verdict on whether the campaign can serve",
+      parameters: [...identityParams, pathParam("accountId"), pathParam("campaignId")],
+      responses: {
+        "200": jsonResponse("Serving state", "CampaignServingState"),
+        "404": jsonResponse("Campaign not found"),
+      },
+    },
+  },
+  "/orgs/google-ads/managed-accounts": {
+    post: {
+      summary: "Provision a managed advertiser account under our manager account",
+      description:
+        "The managed path: the client supplies NO Google credential and never opens the Google Ads UI. Idempotent per brand — a second call for the same brandId returns the account that already exists (200, created=false).",
+      parameters: identityParams,
+      requestBody: jsonBody("CreateManagedAccountBody"),
+      responses: {
+        "200": jsonResponse("Account already existed", "CreateManagedAccountResponse"),
+        "201": jsonResponse("Account created", "CreateManagedAccountResponse"),
+        "502": jsonResponse("Google rejected the account creation"),
+      },
+    },
+    get: {
+      summary: "List the org's managed advertiser accounts",
+      parameters: identityParams,
+      responses: { "200": jsonResponse("Managed accounts", "ManagedAccountsResponse") },
+    },
+  },
+};
+
 const spec = {
   openapi: "3.0.0",
   info: {
@@ -39,6 +275,28 @@ const spec = {
       UploadConversionsBody: toSchema(schemas.UploadConversionsBodySchema),
       UploadConversionsResponse: toSchema(schemas.UploadConversionsResponseSchema),
       SpendResponse: toSchema(schemas.SpendResponseSchema),
+      BiddingStrategy: toSchema(schemas.BiddingStrategySchema),
+      UpdateBiddingBody: toSchema(schemas.UpdateBiddingBodySchema),
+      CreateAdGroupBody: toSchema(schemas.CreateAdGroupBodySchema),
+      UpdateAdGroupBody: toSchema(schemas.UpdateAdGroupBodySchema),
+      AdGroup: toSchema(schemas.AdGroupSchema),
+      AdGroupsResponse: toSchema(schemas.AdGroupsResponseSchema),
+      AddKeywordsBody: toSchema(schemas.AddKeywordsBodySchema),
+      AddNegativeKeywordsBody: toSchema(schemas.AddNegativeKeywordsBodySchema),
+      UpdateKeywordBody: toSchema(schemas.UpdateKeywordBodySchema),
+      CreatedCriteriaResponse: toSchema(schemas.CreatedCriteriaResponseSchema),
+      Keyword: toSchema(schemas.KeywordSchema),
+      KeywordsResponse: toSchema(schemas.KeywordsResponseSchema),
+      CampaignNegativeKeywordsResponse: toSchema(schemas.CampaignNegativeKeywordsResponseSchema),
+      CreateResponsiveSearchAdBody: toSchema(schemas.CreateResponsiveSearchAdBodySchema),
+      UpdateAdBody: toSchema(schemas.UpdateAdBodySchema),
+      ResponsiveSearchAd: toSchema(schemas.ResponsiveSearchAdSchema),
+      AdsResponse: toSchema(schemas.AdsResponseSchema),
+      CampaignServingState: toSchema(schemas.CampaignServingStateSchema),
+      CampaignStructureResponse: toSchema(schemas.CampaignStructureResponseSchema),
+      CreateManagedAccountBody: toSchema(schemas.CreateManagedAccountBodySchema),
+      CreateManagedAccountResponse: toSchema(schemas.CreateManagedAccountResponseSchema),
+      ManagedAccountsResponse: toSchema(schemas.ManagedAccountsResponseSchema),
       SpendDay: toSchema(schemas.SpendDaySchema),
       ConversionAction: toSchema(schemas.ConversionActionSchema),
       CreateCampaignBody: toSchema(schemas.CreateCampaignBodySchema),
@@ -121,6 +379,7 @@ const spec = {
     },
   },
   paths: {
+    ...servingPaths,
     "/health": {
       get: {
         summary: "Health check",

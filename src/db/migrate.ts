@@ -231,6 +231,28 @@ CREATE TABLE IF NOT EXISTS google_ads_spend_daily (
 );
 CREATE INDEX IF NOT EXISTS idx_google_ads_spend_daily_org_date ON google_ads_spend_daily(org_id, spend_date DESC);
 CREATE INDEX IF NOT EXISTS idx_google_ads_spend_daily_account ON google_ads_spend_daily(org_id, account_id, spend_date DESC);
+
+-- ─── Managed advertiser accounts (created under OUR manager account) ───
+-- The managed path advertises from the platform's own manager account: the
+-- client supplies NO Google credential and never opens the Google Ads UI.
+-- One row per Google Ads client account we created for an org. brand_id is
+-- optional; when set it is unique per org so re-provisioning a brand returns
+-- the account that already exists instead of creating a second one.
+CREATE TABLE IF NOT EXISTS google_ads_managed_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  brand_id TEXT,
+  account_id TEXT NOT NULL,
+  manager_account_id TEXT NOT NULL,
+  descriptive_name TEXT NOT NULL,
+  currency_code TEXT NOT NULL,
+  time_zone TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_google_ads_managed_accounts_org ON google_ads_managed_accounts(org_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_google_ads_managed_accounts_org_brand
+  ON google_ads_managed_accounts(org_id, brand_id) WHERE brand_id IS NOT NULL;
 `;
 
 export const runMigrations = async (): Promise<void> => {

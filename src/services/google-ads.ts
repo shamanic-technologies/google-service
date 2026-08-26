@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import type { GoogleCredentials } from "./key-service";
+import { buildBiddingStrategyFields, type BiddingStrategyInput } from "./bidding";
 
 // Use lightweight interfaces instead of importing the massive protobuf types
 // from google-ads-api which causes tsc OOM
@@ -28,6 +29,28 @@ export interface GoogleAdsCustomer {
       partial_failure_error?: { message?: string; code?: number } | null;
     }>;
   };
+  // Everything BELOW the campaign — a Search campaign with none of this serves
+  // zero impressions, so these are what make a created campaign deliverable.
+  adGroups: MutateResource;
+  adGroupCriteria: MutateResource;
+  adGroupAds: MutateResource;
+  campaignCriteria: MutateResource;
+  customers: {
+    createCustomerClient: (request: Record<string, unknown>) => Promise<{
+      resource_name?: string;
+      resourceName?: string;
+    }>;
+  };
+}
+
+export interface MutateResult {
+  results: Array<{ resource_name: string }>;
+}
+
+export interface MutateResource {
+  create: (data: unknown[]) => Promise<MutateResult>;
+  update: (data: unknown[]) => Promise<unknown>;
+  remove: (resourceNames: string[]) => Promise<unknown>;
 }
 
 // Lazy-load the heavy module at runtime, not at type-check time
@@ -364,9 +387,11 @@ export interface CreateCampaignInput {
   advertisingChannelType: string;
   status: string;
   budgetAmountMicros: string;
-  biddingStrategy?: string;
+  bidding?: BiddingStrategyInput;
   startDate?: string;
   endDate?: string;
+  /** SEARCH only — defaults to true (Google's own search partners stay off). */
+  targetSearchNetwork?: boolean;
 }
 
 export const createCampaign = async (
@@ -393,6 +418,23 @@ export const createCampaign = async (
   if (input.startDate) campaignData.start_date = input.startDate;
   if (input.endDate) campaignData.end_date = input.endDate;
 
+  // A Search campaign must state which networks it serves on; left implicit,
+  // a campaign can end up opted into partners nobody asked for.
+  if (input.advertisingChannelType === "SEARCH") {
+    campaignData.network_settings = {
+      target_google_search: true,
+      target_search_network: input.targetSearchNetwork !== false,
+      target_content_network: false,
+      target_partner_search_network: false,
+    };
+  }
+
+  // Bidding is settable at creation. A campaign with no conversion history
+  // starts click-based or manual and graduates later via PUT .../bidding.
+  if (input.bidding) {
+    Object.assign(campaignData, buildBiddingStrategyFields(input.bidding));
+  }
+
   const result = await customer.campaigns.create([campaignData]);
   const resourceName = result.results[0].resource_name;
   const idMatch = resourceName.match(/\/(\d+)$/);
@@ -403,7 +445,7 @@ export const createCampaign = async (
     name: input.name,
     status: input.status,
     advertisingChannelType: input.advertisingChannelType,
-    biddingStrategy: input.biddingStrategy,
+    biddingStrategy: input.bidding?.type,
     budgetAmountMicros: input.budgetAmountMicros,
     startDate: input.startDate,
     endDate: input.endDate,
@@ -417,6 +459,7 @@ export const updateCampaign = async (
     status?: string;
     budgetAmountMicros?: string;
     name?: string;
+    bidding?: BiddingStrategyInput;
   }
 ): Promise<Record<string, unknown>> => {
   const campaignUpdates: Record<string, unknown> = {
@@ -425,6 +468,11 @@ export const updateCampaign = async (
 
   if (updates.status) campaignUpdates.status = updates.status;
   if (updates.name) campaignUpdates.name = updates.name;
+  // Switching strategy on a LIVE campaign: setting the new scheme field is the
+  // switch — the campaign is never recreated and keeps its id and history.
+  if (updates.bidding) {
+    Object.assign(campaignUpdates, buildBiddingStrategyFields(updates.bidding));
+  }
 
   if (Object.keys(campaignUpdates).length > 1) {
     await customer.campaigns.update([campaignUpdates]);
