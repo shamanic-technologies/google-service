@@ -371,7 +371,7 @@ describe("x-brand-id header propagation", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(
       TEST_ORG_ID, TEST_USER_ID, "111",
       expect.objectContaining({ method: "GET" }),
-      TEST_CHILD_RUN_ID, undefined, TEST_BRAND_ID
+      TEST_CHILD_RUN_ID, undefined, TEST_BRAND_ID, undefined
     );
   });
 });
@@ -695,7 +695,7 @@ describe("GET /accounts/:accountId/campaigns", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "GET",
       path: "/accounts/:accountId/campaigns",
-    }, TEST_CHILD_RUN_ID, undefined, undefined);
+    }, TEST_CHILD_RUN_ID, undefined, undefined, undefined);
   });
 
   it("filters by status", async () => {
@@ -977,7 +977,7 @@ describe("POST /accounts/:accountId/campaigns", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "POST",
       path: "/accounts/:accountId/campaigns",
-    }, TEST_CHILD_RUN_ID, undefined, undefined);
+    }, TEST_CHILD_RUN_ID, undefined, undefined, undefined);
   });
 
   it("creates a campaign", async () => {
@@ -1034,7 +1034,7 @@ describe("PATCH /accounts/:accountId/campaigns/:campaignId", () => {
     expect(mockGetRefreshToken).toHaveBeenCalledWith(TEST_ORG_ID, TEST_USER_ID, "111", {
       method: "PATCH",
       path: "/accounts/:accountId/campaigns/:campaignId",
-    }, TEST_CHILD_RUN_ID, undefined, undefined);
+    }, TEST_CHILD_RUN_ID, undefined, undefined, undefined);
   });
 });
 
@@ -1088,7 +1088,9 @@ describe("POST /accounts/:accountId/campaigns/:campaignId/duplicate", () => {
 // ─── Account not found ───
 
 describe("Account not found error handling", () => {
-  it("returns 404 when account is not in DB", async () => {
+  it("returns 404 when the org owns neither a connected nor a managed account", async () => {
+    // Connected accounts, then managed accounts — both empty.
+    mockQuery.mockResolvedValueOnce({ rows: [] });
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)

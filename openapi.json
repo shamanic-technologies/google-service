@@ -601,6 +601,1149 @@
         ],
         "additionalProperties": false
       },
+      "BiddingStrategy": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "MANUAL_CPC",
+              "MAXIMIZE_CLICKS",
+              "MAXIMIZE_CONVERSIONS",
+              "MAXIMIZE_CONVERSION_VALUE",
+              "TARGET_CPA",
+              "TARGET_ROAS"
+            ]
+          },
+          "enhancedCpcEnabled": {
+            "type": "boolean"
+          },
+          "cpcBidCeilingMicros": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "targetCpaMicros": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "targetRoas": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateBiddingBody": {
+        "type": "object",
+        "properties": {
+          "bidding": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "MANUAL_CPC",
+                  "MAXIMIZE_CLICKS",
+                  "MAXIMIZE_CONVERSIONS",
+                  "MAXIMIZE_CONVERSION_VALUE",
+                  "TARGET_CPA",
+                  "TARGET_ROAS"
+                ]
+              },
+              "enhancedCpcEnabled": {
+                "type": "boolean"
+              },
+              "cpcBidCeilingMicros": {
+                "type": "string",
+                "pattern": "^\\d+$"
+              },
+              "targetCpaMicros": {
+                "type": "string",
+                "pattern": "^\\d+$"
+              },
+              "targetRoas": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "bidding"
+        ],
+        "additionalProperties": false
+      },
+      "CreateAdGroupBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENABLED",
+              "PAUSED",
+              "REMOVED"
+            ]
+          },
+          "cpcBidMicros": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateAdGroupBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENABLED",
+              "PAUSED",
+              "REMOVED"
+            ]
+          },
+          "cpcBidMicros": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "campaignId": {
+            "type": "string"
+          },
+          "cpcBidMicros": {
+            "type": "string",
+            "nullable": true
+          },
+          "resourceName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "campaignId",
+          "cpcBidMicros",
+          "resourceName"
+        ],
+        "additionalProperties": false
+      },
+      "AdGroupsResponse": {
+        "type": "object",
+        "properties": {
+          "adGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "campaignId": {
+                  "type": "string"
+                },
+                "cpcBidMicros": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "resourceName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "status",
+                "campaignId",
+                "cpcBidMicros",
+                "resourceName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "adGroups"
+        ],
+        "additionalProperties": false
+      },
+      "AddKeywordsBody": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "matchType": {
+                  "type": "string",
+                  "enum": [
+                    "EXACT",
+                    "PHRASE",
+                    "BROAD"
+                  ]
+                },
+                "cpcBidMicros": {
+                  "type": "string",
+                  "pattern": "^\\d+$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "ENABLED",
+                    "PAUSED",
+                    "REMOVED"
+                  ]
+                }
+              },
+              "required": [
+                "text",
+                "matchType"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 2000
+          }
+        },
+        "required": [
+          "keywords"
+        ],
+        "additionalProperties": false
+      },
+      "AddNegativeKeywordsBody": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "matchType": {
+                  "type": "string",
+                  "enum": [
+                    "EXACT",
+                    "PHRASE",
+                    "BROAD"
+                  ]
+                }
+              },
+              "required": [
+                "text",
+                "matchType"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 2000
+          }
+        },
+        "required": [
+          "keywords"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateKeywordBody": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENABLED",
+              "PAUSED",
+              "REMOVED"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "CreatedCriteriaResponse": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterionId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "matchType": {
+                  "type": "string"
+                },
+                "resourceName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "criterionId",
+                "text",
+                "matchType",
+                "resourceName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "keywords"
+        ],
+        "additionalProperties": false
+      },
+      "Keyword": {
+        "type": "object",
+        "properties": {
+          "criterionId": {
+            "type": "string"
+          },
+          "adGroupId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "matchType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "negative": {
+            "type": "boolean"
+          },
+          "cpcBidMicros": {
+            "type": "string",
+            "nullable": true
+          },
+          "resourceName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "criterionId",
+          "adGroupId",
+          "text",
+          "matchType",
+          "status",
+          "negative",
+          "cpcBidMicros",
+          "resourceName"
+        ],
+        "additionalProperties": false
+      },
+      "KeywordsResponse": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterionId": {
+                  "type": "string"
+                },
+                "adGroupId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "matchType": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "negative": {
+                  "type": "boolean"
+                },
+                "cpcBidMicros": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "resourceName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "criterionId",
+                "adGroupId",
+                "text",
+                "matchType",
+                "status",
+                "negative",
+                "cpcBidMicros",
+                "resourceName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "keywords"
+        ],
+        "additionalProperties": false
+      },
+      "CampaignNegativeKeywordsResponse": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterionId": {
+                  "type": "string"
+                },
+                "campaignId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "matchType": {
+                  "type": "string"
+                },
+                "resourceName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "criterionId",
+                "campaignId",
+                "text",
+                "matchType",
+                "resourceName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "keywords"
+        ],
+        "additionalProperties": false
+      },
+      "CreateResponsiveSearchAdBody": {
+        "type": "object",
+        "properties": {
+          "headlines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pinnedField": {
+                  "type": "string",
+                  "enum": [
+                    "HEADLINE_1",
+                    "HEADLINE_2",
+                    "HEADLINE_3",
+                    "DESCRIPTION_1",
+                    "DESCRIPTION_2"
+                  ]
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 3,
+            "maxItems": 15
+          },
+          "descriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/properties/headlines/items"
+            },
+            "minItems": 2,
+            "maxItems": 4
+          },
+          "finalUrls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "minItems": 1
+          },
+          "path1": {
+            "type": "string",
+            "maxLength": 15
+          },
+          "path2": {
+            "type": "string",
+            "maxLength": 15
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENABLED",
+              "PAUSED",
+              "REMOVED"
+            ]
+          }
+        },
+        "required": [
+          "headlines",
+          "descriptions",
+          "finalUrls"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateAdBody": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENABLED",
+              "PAUSED",
+              "REMOVED"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ResponsiveSearchAd": {
+        "type": "object",
+        "properties": {
+          "adId": {
+            "type": "string"
+          },
+          "adGroupId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "headlines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pinnedField": {
+                  "type": "string",
+                  "enum": [
+                    "HEADLINE_1",
+                    "HEADLINE_2",
+                    "HEADLINE_3",
+                    "DESCRIPTION_1",
+                    "DESCRIPTION_2"
+                  ]
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "descriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/properties/headlines/items"
+            }
+          },
+          "finalUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "path1": {
+            "type": "string",
+            "nullable": true
+          },
+          "path2": {
+            "type": "string",
+            "nullable": true
+          },
+          "resourceName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "adId",
+          "adGroupId",
+          "status",
+          "headlines",
+          "descriptions",
+          "finalUrls",
+          "path1",
+          "path2",
+          "resourceName"
+        ],
+        "additionalProperties": false
+      },
+      "AdsResponse": {
+        "type": "object",
+        "properties": {
+          "ads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "adId": {
+                  "type": "string"
+                },
+                "adGroupId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "headlines": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pinnedField": {
+                        "type": "string",
+                        "enum": [
+                          "HEADLINE_1",
+                          "HEADLINE_2",
+                          "HEADLINE_3",
+                          "DESCRIPTION_1",
+                          "DESCRIPTION_2"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "descriptions": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/properties/ads/items/properties/headlines/items"
+                  }
+                },
+                "finalUrls": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "path1": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "path2": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "resourceName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "adId",
+                "adGroupId",
+                "status",
+                "headlines",
+                "descriptions",
+                "finalUrls",
+                "path1",
+                "path2",
+                "resourceName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "ads"
+        ],
+        "additionalProperties": false
+      },
+      "CampaignServingState": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "servingStatus": {
+            "type": "string"
+          },
+          "primaryStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "primaryStatusReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "campaignId",
+          "status",
+          "servingStatus",
+          "primaryStatus",
+          "primaryStatusReasons"
+        ],
+        "additionalProperties": false
+      },
+      "CampaignStructureResponse": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "serving": {
+            "type": "object",
+            "properties": {
+              "campaignId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "servingStatus": {
+                "type": "string"
+              },
+              "primaryStatus": {
+                "type": "string",
+                "nullable": true
+              },
+              "primaryStatusReasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "campaignId",
+              "status",
+              "servingStatus",
+              "primaryStatus",
+              "primaryStatusReasons"
+            ],
+            "additionalProperties": false,
+            "nullable": true
+          },
+          "adGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "campaignId": {
+                  "type": "string"
+                },
+                "cpcBidMicros": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "resourceName": {
+                  "type": "string"
+                },
+                "keywords": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "criterionId": {
+                        "type": "string"
+                      },
+                      "adGroupId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "matchType": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "negative": {
+                        "type": "boolean"
+                      },
+                      "cpcBidMicros": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "resourceName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "criterionId",
+                      "adGroupId",
+                      "text",
+                      "matchType",
+                      "status",
+                      "negative",
+                      "cpcBidMicros",
+                      "resourceName"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "negativeKeywords": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/properties/adGroups/items/properties/keywords/items"
+                  }
+                },
+                "ads": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "adId": {
+                        "type": "string"
+                      },
+                      "adGroupId": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "headlines": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pinnedField": {
+                              "type": "string",
+                              "enum": [
+                                "HEADLINE_1",
+                                "HEADLINE_2",
+                                "HEADLINE_3",
+                                "DESCRIPTION_1",
+                                "DESCRIPTION_2"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "descriptions": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/properties/adGroups/items/properties/ads/items/properties/headlines/items"
+                        }
+                      },
+                      "finalUrls": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "path1": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "path2": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "resourceName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "adId",
+                      "adGroupId",
+                      "status",
+                      "headlines",
+                      "descriptions",
+                      "finalUrls",
+                      "path1",
+                      "path2",
+                      "resourceName"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "status",
+                "campaignId",
+                "cpcBidMicros",
+                "resourceName",
+                "keywords",
+                "negativeKeywords",
+                "ads"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "campaignNegativeKeywords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterionId": {
+                  "type": "string"
+                },
+                "campaignId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "matchType": {
+                  "type": "string"
+                },
+                "resourceName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "criterionId",
+                "campaignId",
+                "text",
+                "matchType",
+                "resourceName"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "campaignId",
+          "serving",
+          "adGroups",
+          "campaignNegativeKeywords"
+        ],
+        "additionalProperties": false
+      },
+      "CreateManagedAccountBody": {
+        "type": "object",
+        "properties": {
+          "descriptiveName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "currencyCode": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          },
+          "timeZone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brandId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "descriptiveName",
+          "currencyCode",
+          "timeZone"
+        ],
+        "additionalProperties": false
+      },
+      "CreateManagedAccountResponse": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "orgId": {
+                "type": "string"
+              },
+              "brandId": {
+                "type": "string",
+                "nullable": true
+              },
+              "managerAccountId": {
+                "type": "string"
+              },
+              "descriptiveName": {
+                "type": "string"
+              },
+              "currencyCode": {
+                "type": "string"
+              },
+              "timeZone": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "orgId",
+              "brandId",
+              "managerAccountId",
+              "descriptiveName",
+              "currencyCode",
+              "timeZone",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          },
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "account",
+          "created"
+        ],
+        "additionalProperties": false
+      },
+      "ManagedAccountsResponse": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "orgId": {
+                  "type": "string"
+                },
+                "brandId": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "managerAccountId": {
+                  "type": "string"
+                },
+                "descriptiveName": {
+                  "type": "string"
+                },
+                "currencyCode": {
+                  "type": "string"
+                },
+                "timeZone": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "orgId",
+                "brandId",
+                "managerAccountId",
+                "descriptiveName",
+                "currencyCode",
+                "timeZone",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "additionalProperties": false
+      },
       "SpendDay": {
         "type": "object",
         "properties": {
@@ -695,8 +1838,44 @@
             "type": "string",
             "minLength": 1
           },
-          "biddingStrategy": {
-            "type": "string"
+          "bidding": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "MANUAL_CPC",
+                  "MAXIMIZE_CLICKS",
+                  "MAXIMIZE_CONVERSIONS",
+                  "MAXIMIZE_CONVERSION_VALUE",
+                  "TARGET_CPA",
+                  "TARGET_ROAS"
+                ]
+              },
+              "enhancedCpcEnabled": {
+                "type": "boolean"
+              },
+              "cpcBidCeilingMicros": {
+                "type": "string",
+                "pattern": "^\\d+$"
+              },
+              "targetCpaMicros": {
+                "type": "string",
+                "pattern": "^\\d+$"
+              },
+              "targetRoas": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "targetSearchNetwork": {
+            "type": "boolean"
           },
           "startDate": {
             "type": "string",
@@ -782,8 +1961,41 @@
           "budgetAmountMicros": {
             "type": "string"
           },
-          "biddingStrategy": {
-            "type": "string"
+          "bidding": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "MANUAL_CPC",
+                  "MAXIMIZE_CLICKS",
+                  "MAXIMIZE_CONVERSIONS",
+                  "MAXIMIZE_CONVERSION_VALUE",
+                  "TARGET_CPA",
+                  "TARGET_ROAS"
+                ]
+              },
+              "enhancedCpcEnabled": {
+                "type": "boolean"
+              },
+              "cpcBidCeilingMicros": {
+                "type": "string",
+                "pattern": "^\\d+$"
+              },
+              "targetCpaMicros": {
+                "type": "string",
+                "pattern": "^\\d+$"
+              },
+              "targetRoas": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
           },
           "name": {
             "type": "string"
@@ -2242,6 +3454,1185 @@
     }
   },
   "paths": {
+    "/accounts/{accountId}/campaigns/{campaignId}/ad-groups": {
+      "post": {
+        "summary": "Create an ad group under a campaign",
+        "description": "The grouping level beneath a campaign. A Search campaign with no ad group serves zero impressions.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdGroupBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ad group created"
+          },
+          "404": {
+            "description": "Org owns no such account"
+          },
+          "502": {
+            "description": "Google rejected the request"
+          }
+        }
+      },
+      "get": {
+        "summary": "List the campaign's ad groups",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ad groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdGroupsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/ad-groups/{adGroupId}": {
+      "patch": {
+        "summary": "Update an ad group (name, status, default bid)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdGroupBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated ad group"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/ad-groups/{adGroupId}/keywords": {
+      "post": {
+        "summary": "Add the search terms the ad group bids on",
+        "description": "Each keyword carries its match behaviour (EXACT, PHRASE, BROAD).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddKeywordsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Keywords created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedCriteriaResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Google rejected the request"
+          }
+        }
+      },
+      "get": {
+        "summary": "List the ad group's keywords",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Keywords",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeywordsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/ad-groups/{adGroupId}/keywords/{criterionId}": {
+      "patch": {
+        "summary": "Pause or enable one keyword",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "criterionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKeywordBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Keyword updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove one keyword",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "criterionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Keyword removed"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/ad-groups/{adGroupId}/negative-keywords": {
+      "post": {
+        "summary": "Add terms this ad group must never bid on",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddNegativeKeywordsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Negative keywords created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedCriteriaResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List the ad group's negative keywords",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Negative keywords",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeywordsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/campaigns/{campaignId}/negative-keywords": {
+      "post": {
+        "summary": "Add terms the whole campaign must never bid on",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddNegativeKeywordsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Negative keywords created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedCriteriaResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List the campaign's negative keywords",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Negative keywords",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignNegativeKeywordsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/campaigns/{campaignId}/negative-keywords/{criterionId}": {
+      "delete": {
+        "summary": "Remove one campaign-level negative keyword",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "criterionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Negative keyword removed"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/ad-groups/{adGroupId}/ads": {
+      "post": {
+        "summary": "Create the responsive search ad",
+        "description": "Google composes the ad at serve time from the headline and description variants that exist, so choosing the variants IS writing the ad. A variant may be pinned to a fixed position (compliance or brand lines) while the rest stay free for Google to test.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResponsiveSearchAdBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ad created"
+          },
+          "502": {
+            "description": "Google rejected the ad (including a policy refusal)"
+          }
+        }
+      },
+      "get": {
+        "summary": "List the ad group's responsive search ads",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/ad-groups/{adGroupId}/ads/{adId}": {
+      "patch": {
+        "summary": "Pause or enable one ad",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ad updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove one ad",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adGroupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "adId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ad removed"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/campaigns/{campaignId}/bidding": {
+      "put": {
+        "summary": "Change the bidding approach on a live campaign",
+        "description": "A new campaign launches click-based or manual because it has no conversion history, and graduates to conversion-based bidding once conversions have accrued. The campaign is never recreated: it keeps its id, its structure and its history.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBiddingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bidding strategy changed"
+          },
+          "502": {
+            "description": "Google rejected the change"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/campaigns/{campaignId}/structure": {
+      "get": {
+        "summary": "Read back everything created for this campaign",
+        "description": "Campaign serving state plus every ad group with its keywords, negatives and ads — so a later run can adjust what exists instead of duplicating it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Campaign structure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignStructureResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/campaigns/{campaignId}/serving-state": {
+      "get": {
+        "summary": "Google's own verdict on whether the campaign can serve",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Serving state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignServingState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Campaign not found"
+          }
+        }
+      }
+    },
+    "/orgs/google-ads/managed-accounts": {
+      "post": {
+        "summary": "Provision a managed advertiser account under our manager account",
+        "description": "The managed path: the client supplies NO Google credential and never opens the Google Ads UI. Idempotent per brand — a second call for the same brandId returns the account that already exists (200, created=false).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManagedAccountBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account already existed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateManagedAccountResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateManagedAccountResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Google rejected the account creation"
+          }
+        }
+      },
+      "get": {
+        "summary": "List the org's managed advertiser accounts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Managed accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedAccountsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health check",
