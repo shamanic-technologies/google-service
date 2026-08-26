@@ -1,6 +1,6 @@
 # google-service
 
-Google Ads API v23 wrapper for MCC agency management, plus Google CRM bronze→silver ingestion (Gmail + People readonly) feeding the dashboard CRM at `/orgs/{orgId}/services/crm`.
+Google Ads API v23 wrapper for MCC agency management (campaigns, spend cost declaration, offline conversion upload), plus Google CRM bronze→silver ingestion (Gmail + People readonly) feeding the dashboard CRM at `/orgs/{orgId}/services/crm`.
 
 ## Identity
 
@@ -10,7 +10,7 @@ The client-service is the source of truth for identity resolution.
 
 ### Tracking / cost-attribution headers
 
-Inbound `x-run-id` (required), `x-feature-slug`, `x-brand-id`, **`x-audience-id`** (all optional) are the tracking block. They are read in `requireIdentityHeaders` (`src/middleware/validate.ts`) onto `req`, then forwarded to every **internal** sibling call (runs-service, billing-service, key-service) via the `trackingHeaders()` allowlist builder in `src/lib/tracking-headers.ts` — never cherry-picked per field. `x-audience-id` (the campaign's priority audience) tags `runs.audience_id` on `createRun` and the cost row on `addCosts`, which is how per-audience cost attribution works (`COALESCE(runs_costs.audience_id, runs.audience_id)` in runs-service). The only metered cost on the campaign path is `serper-dev-query` (`/search/*`). **Egress safety**: `trackingHeaders()` is imported ONLY by the internal clients; external vendor calls (Serper, Gmail/People, Google Ads, Google OAuth) build their own provider-auth headers and MUST never receive the tracking block.
+Inbound `x-run-id` (required), `x-feature-slug`, `x-brand-id`, **`x-audience-id`** (all optional) are the tracking block. They are read in `requireIdentityHeaders` (`src/middleware/validate.ts`) onto `req`, then forwarded to every **internal** sibling call (runs-service, billing-service, key-service) via the `trackingHeaders()` allowlist builder in `src/lib/tracking-headers.ts` — never cherry-picked per field. `x-audience-id` (the campaign's priority audience) tags `runs.audience_id` on `createRun` and the cost row on `addCosts`, which is how per-audience cost attribution works (`COALESCE(runs_costs.audience_id, runs.audience_id)` in runs-service). Metered costs: `serper-dev-query` (`/search/*`) and `google-ads-spend` (declared by the spend cron, see below). **Egress safety**: `trackingHeaders()` is imported ONLY by the internal clients; external vendor calls (Serper, Gmail/People, Google Ads, Google OAuth) build their own provider-auth headers and MUST never receive the tracking block.
 
 ## Stack
 
@@ -103,6 +103,34 @@ The detached promise updates the row to `succeeded` (with `summary` jsonb) or `f
 - Backfill is **resumable**: load the `gmail_message_id`s already in bronze and skip them before the per-message `getMessage`, so an interrupted run converges instead of re-scanning from zero. `gmail_history_id` is persisted only on successful completion (captured pre-loop) → next sync is a delta.
 - Google People expires syncTokens: on `GoogleApiError` `400` with body `EXPIRED_SYNC_TOKEN` (`isExpiredSyncTokenError`), clear the stored sync token and retry a full list once. Applies to BOTH `people_sync_token` and `other_contacts_sync_token`.
 - Match Google failures on `GoogleApiError.status`, never `.message.includes("…")` substrings.
+
+## Google Ads spend → declared cost (PASS-THROUGH)
+
+The money Google charges an org's campaigns becomes that org's declared cost. Catalogue line `google-ads-spend` in costs-service: `pricingBasis: pass-through`, **unit = ONE USD cent of platform spend, price 1.0 cent/unit**, so the declared quantity is literally the number of cents Google charged. **Never mark it up** — the org pays exactly the platform price, by decision of the owner.
+
+- `src/services/spend-ingest.ts` — `ingestSpendForAccount()` reads `getCampaignSpendByDay()` (GAQL segmented on `segments.date`) over the lookback window, upserts `google_ads_spend_daily`, and declares the undeclared part.
+- **Dated by GOOGLE's day, never our poll day.** The GAQL is segmented on `segments.date` on purpose: an un-segmented total could only be dated by when we read it, which shifts every downstream daily chart by a day. One run per `(org, account, spend_date)`, `taskName: google-ads-spend:<YYYY-MM-DD>`, run `idempotencyKey` namespaced on that triple so a re-read of the same day reuses the SAME run.
+- **ACTUALISED, never provisioned.** The money is already spent when we read it, so there is nothing to hold ahead of a call and nothing to authorise against (an after-the-fact charge cannot be refused). `costSource: "platform"` — the platform's Google Ads account is what was charged.
+- **Delta declaration.** Google restates a day's cost for a few days, so each pass declares `observed_cents − declared_cents` and never re-declares. A DOWNWARD restatement keeps `declared_cents` and logs a warning (declared cost rows are not rewritten retroactively). Per-cost `idempotencyKey` is `<campaignId>:<observedCents>`, so a retry after a failed DB write cannot double-charge.
+- **Fail loud, no silent fallback.** A (campaign, day) whose cost could not be declared keeps its old `declared_cents` and the error propagates; the next pass re-declares the delta. A spend figure we could not read is NEVER treated as zero. Accounts are isolated at the cron level — one account's failure does not abort the rest.
+
+### Spend cron — its OWN schedule (do NOT chain it to campaign work)
+
+`src/services/spend-cron.ts` `startSpendSync()` (scheduled from `index.ts` after listen) runs `runSpendIngestOnce()` every `GOOGLE_ADS_SPEND_INTERVAL_HOURS` (default 12), first tick 5 min after boot (never AT boot), lookback `GOOGLE_ADS_SPEND_LOOKBACK_DAYS` (default 7).
+
+**Never fold the spend read into a job that creates or updates a campaign.** Google publishes a day's spend hours after the fact, so a read chained to a write observes nothing — and both steps still report success, so nothing looks broken while result latency silently equals the WRITING job's interval instead of the data's real availability. Same reason it is kept out of the CRM auto-sync (different provider surface, deliberately low-frequency). Neither timer exists to touch the DB; each query takes a fresh pool connection.
+
+`google_ads_spend_daily` — key `(org_id, account_id, campaign_id, spend_date)`; `cost_micros`, `observed_cents` (what Google reports now), `declared_cents` (what has been declared), `run_id`, `last_seen_at`, `last_declared_at`. Readable via `GET /accounts/{accountId}/spend`.
+
+## Offline conversion upload (outcome → Google)
+
+`POST /accounts/{accountId}/conversions/upload` reports a measured outcome (a paid client) back to Google as a click conversion, attributed to the click that produced it — Smart Bidding can only optimise against conversions it has been told about. `uploadClickConversions()` in `src/services/google-ads.ts` wraps `ConversionUploadService.uploadClickConversions`.
+
+- One of `gclid` / `gbraid` / `wbraid` is required (that IS the attribution to the originating click).
+- `conversionDateTime` must carry an explicit UTC offset: `yyyy-mm-dd hh:mm:ss+|-hh:mm`. Google rejects anything else; the Zod schema enforces it before the call.
+- Google requires exactly one of `partial_failure` / `validate_only`. Normal upload → `partial_failure: true`; `validateOnly: true` → dry run.
+- `uploaded` counts only the entries Google actually ACCEPTED (a rejected row comes back as an empty result entry). A batch Google accepted nothing from throws → the route answers 502. Never report the requested count as uploaded.
+- `GET /accounts/{accountId}/conversions` (conversion-action list) is the neighbouring read half — it is where the `conversionActionId` comes from.
 
 ### Future gold / canonical-Human trigger
 

@@ -22,6 +22,12 @@ export interface GoogleAdsCustomer {
     create: (data: unknown[]) => Promise<{ results: Array<{ resource_name: string }> }>;
     update: (data: unknown[]) => Promise<unknown>;
   };
+  conversionUploads: {
+    uploadClickConversions: (request: Record<string, unknown>) => Promise<{
+      results?: Array<Record<string, unknown>>;
+      partial_failure_error?: { message?: string; code?: number } | null;
+    }>;
+  };
 }
 
 // Lazy-load the heavy module at runtime, not at type-check time
@@ -238,6 +244,119 @@ export const listConversionActions = async (
       type: String(ca.type),
     };
   });
+};
+
+// ─── Spend (money Google actually charged) ───
+
+export interface CampaignDaySpend {
+  campaignId: string;
+  /** GOOGLE's day for this spend (segments.date, YYYY-MM-DD) — never our poll day. */
+  date: string;
+  costMicros: string;
+}
+
+/**
+ * Per-campaign, per-day cost for a date range, keyed on Google's own reporting
+ * day. Segmented by date on purpose: an un-segmented total could only ever be
+ * dated by when we read it, which shifts every downstream daily chart by a day.
+ */
+export const getCampaignSpendByDay = async (
+  customer: GoogleAdsCustomer,
+  startDate: string,
+  endDate: string
+): Promise<CampaignDaySpend[]> => {
+  const results = await customer.query(`
+    SELECT
+      campaign.id,
+      segments.date,
+      metrics.cost_micros
+    FROM campaign
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+  `);
+
+  const spend: CampaignDaySpend[] = [];
+  for (const row of results) {
+    const c = row.campaign as Record<string, unknown> | undefined;
+    const segments = row.segments as Record<string, unknown> | undefined;
+    const m = row.metrics as Record<string, unknown> | undefined;
+    if (!c?.id || !segments?.date) continue;
+    spend.push({
+      campaignId: String(c.id),
+      date: String(segments.date),
+      costMicros: String(m?.cost_micros ?? 0),
+    });
+  }
+  return spend;
+};
+
+// ─── Offline conversion upload (send the real outcome back to Google) ───
+
+export interface ClickConversionInput {
+  /** Google click id. One of gclid / gbraid / wbraid is required. */
+  gclid?: string;
+  gbraid?: string;
+  wbraid?: string;
+  /** Conversion action id (from GET /accounts/:accountId/conversions). */
+  conversionActionId: string;
+  /** "yyyy-mm-dd hh:mm:ss+|-hh:mm" — Google rejects anything without an offset. */
+  conversionDateTime: string;
+  conversionValue?: number;
+  currencyCode?: string;
+  orderId?: string;
+}
+
+export interface UploadClickConversionsResult {
+  requested: number;
+  uploaded: number;
+  /** Google's partial-failure message when SOME rows were rejected, else null. */
+  partialFailureError: string | null;
+}
+
+export const uploadClickConversions = async (
+  customer: GoogleAdsCustomer,
+  conversions: ClickConversionInput[],
+  opts: { validateOnly?: boolean } = {}
+): Promise<UploadClickConversionsResult> => {
+  const customerId = customer.credentials.customer_id;
+
+  const payload = conversions.map((c) => {
+    const conversion: Record<string, unknown> = {
+      conversion_action: `customers/${customerId}/conversionActions/${c.conversionActionId}`,
+      conversion_date_time: c.conversionDateTime,
+    };
+    if (c.gclid) conversion.gclid = c.gclid;
+    if (c.gbraid) conversion.gbraid = c.gbraid;
+    if (c.wbraid) conversion.wbraid = c.wbraid;
+    if (c.conversionValue !== undefined) conversion.conversion_value = c.conversionValue;
+    if (c.currencyCode) conversion.currency_code = c.currencyCode;
+    if (c.orderId) conversion.order_id = c.orderId;
+    return conversion;
+  });
+
+  const validateOnly = opts.validateOnly === true;
+  const response = await customer.conversionUploads.uploadClickConversions({
+    customer_id: customerId,
+    conversions: payload,
+    // Google requires exactly one of these to be true.
+    partial_failure: !validateOnly,
+    validate_only: validateOnly,
+  });
+
+  // A rejected row comes back as an empty result entry, so count only the
+  // entries Google actually accepted — never report the requested count as
+  // uploaded (that would silently swallow a whole failed batch).
+  const results = response.results ?? [];
+  const uploaded = results.filter((r) => r && Object.keys(r).length > 0).length;
+  const partialFailureError = response.partial_failure_error?.message ?? null;
+
+  if (uploaded === 0 && conversions.length > 0 && !validateOnly) {
+    throw new Error(
+      `Google accepted 0 of ${conversions.length} conversions` +
+        (partialFailureError ? `: ${partialFailureError}` : "")
+    );
+  }
+
+  return { requested: conversions.length, uploaded, partialFailureError };
 };
 
 export interface CreateCampaignInput {

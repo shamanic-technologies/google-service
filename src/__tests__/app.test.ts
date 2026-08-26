@@ -20,6 +20,7 @@ const {
   mockCreateCampaign,
   mockUpdateCampaign,
   mockDuplicateCampaign,
+  mockUploadClickConversions,
   mockGetCustomer,
   mockSearchWeb,
   mockSearchNews,
@@ -42,6 +43,7 @@ const {
   mockCreateCampaign: vi.fn(),
   mockUpdateCampaign: vi.fn(),
   mockDuplicateCampaign: vi.fn(),
+  mockUploadClickConversions: vi.fn(),
   mockGetCustomer: vi.fn(),
   mockSearchWeb: vi.fn(),
   mockSearchNews: vi.fn(),
@@ -101,6 +103,8 @@ vi.mock("../services/google-ads", () => ({
   createCampaign: (...args: unknown[]) => mockCreateCampaign(...args),
   updateCampaign: (...args: unknown[]) => mockUpdateCampaign(...args),
   duplicateCampaign: (...args: unknown[]) => mockDuplicateCampaign(...args),
+  uploadClickConversions: (...args: unknown[]) => mockUploadClickConversions(...args),
+  getCampaignSpendByDay: vi.fn(),
 }));
 
 import { createApp } from "../app";
@@ -814,6 +818,126 @@ describe("GET /accounts/:accountId/conversions", () => {
     expect(res.status).toBe(200);
     expect(res.body.conversionActions).toHaveLength(1);
     expect(res.body.conversionActions[0].name).toBe("Purchase");
+  });
+});
+
+// ─── Conversion upload (outcome → Google) ───
+
+describe("POST /accounts/:accountId/conversions/upload", () => {
+  const conversion = {
+    gclid: "click-abc",
+    conversionActionId: "456",
+    conversionDateTime: "2026-08-25 13:04:00+00:00",
+    conversionValue: 199.5,
+    currencyCode: "USD",
+  };
+
+  const linkedAccount = () =>
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ refresh_token_provider: "google-ads-refresh-111" }],
+    });
+
+  it("uploads the outcome against the originating click", async () => {
+    linkedAccount();
+    mockGetRefreshToken.mockResolvedValueOnce("fake-refresh-token");
+    mockGetCustomer.mockReturnValueOnce({});
+    mockUploadClickConversions.mockResolvedValueOnce({
+      requested: 1,
+      uploaded: 1,
+      partialFailureError: null,
+    });
+
+    const res = await request(app)
+      .post("/accounts/111/conversions/upload")
+      .set(idHeaders)
+      .send({ conversions: [conversion] });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ requested: 1, uploaded: 1, partialFailureError: null });
+    expect(mockUploadClickConversions).toHaveBeenCalledWith(
+      {},
+      [conversion],
+      { validateOnly: undefined }
+    );
+  });
+
+  it("rejects a conversion with no click identifier", async () => {
+    const { gclid: _gclid, ...noClick } = conversion;
+    const res = await request(app)
+      .post("/accounts/111/conversions/upload")
+      .set(idHeaders)
+      .send({ conversions: [noClick] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("gclid");
+  });
+
+  it("rejects a conversion time without an explicit UTC offset", async () => {
+    const res = await request(app)
+      .post("/accounts/111/conversions/upload")
+      .set(idHeaders)
+      .send({
+        conversions: [{ ...conversion, conversionDateTime: "2026-08-25T13:04:00Z" }],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("surfaces a wholly rejected batch as 502 — never as a success", async () => {
+    linkedAccount();
+    mockGetRefreshToken.mockResolvedValueOnce("fake-refresh-token");
+    mockGetCustomer.mockReturnValueOnce({});
+    mockUploadClickConversions.mockRejectedValueOnce(
+      new Error("Google accepted 0 of 1 conversions: invalid gclid")
+    );
+
+    const res = await request(app)
+      .post("/accounts/111/conversions/upload")
+      .set(idHeaders)
+      .send({ conversions: [conversion] });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain("accepted 0 of 1");
+  });
+});
+
+// ─── Spend ledger ───
+
+describe("GET /accounts/:accountId/spend", () => {
+  it("returns declared spend dated by Google's own day", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          campaign_id: "c1",
+          spend_date: new Date("2026-08-24T00:00:00Z"),
+          cost_micros: "12340000",
+          observed_cents: "1234",
+          declared_cents: "1234",
+          run_id: TEST_CHILD_RUN_ID,
+          last_seen_at: new Date("2026-08-26T09:00:00Z"),
+          last_declared_at: new Date("2026-08-26T09:00:00Z"),
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .get("/accounts/111/spend?startDate=2026-08-20&endDate=2026-08-26")
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    expect(res.body.days[0]).toMatchObject({
+      campaignId: "c1",
+      date: "2026-08-24",
+      observedCents: 1234,
+      declaredCents: 1234,
+    });
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain("FROM google_ads_spend_daily");
+    expect(sql).toContain("org_id = $1");
+    expect(mockQuery.mock.calls[0][1]).toEqual([
+      TEST_ORG_ID,
+      "111",
+      "2026-08-20",
+      "2026-08-26",
+    ]);
   });
 });
 

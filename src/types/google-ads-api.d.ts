@@ -25,6 +25,12 @@ declare module "google-ads-api" {
       create(data: unknown[]): Promise<{ results: Array<{ resource_name: string }> }>;
       update(data: unknown[]): Promise<unknown>;
     };
+    conversionUploads: {
+      uploadClickConversions(request: Record<string, unknown>): Promise<{
+        results?: Array<Record<string, unknown>>;
+        partial_failure_error?: { message?: string; code?: number } | null;
+      }>;
+    };
   }
 }
 

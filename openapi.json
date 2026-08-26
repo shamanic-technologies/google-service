@@ -462,6 +462,187 @@
         ],
         "additionalProperties": false
       },
+      "UploadConversionsBody": {
+        "type": "object",
+        "properties": {
+          "conversions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "gclid": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "gbraid": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "wbraid": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "conversionActionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "conversionDateTime": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+                },
+                "conversionValue": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "currencyCode": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 3
+                },
+                "orderId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "conversionActionId",
+                "conversionDateTime"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 2000
+          },
+          "validateOnly": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "conversions"
+        ],
+        "additionalProperties": false
+      },
+      "UploadConversionsResponse": {
+        "type": "object",
+        "properties": {
+          "requested": {
+            "type": "number"
+          },
+          "uploaded": {
+            "type": "number"
+          },
+          "partialFailureError": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "requested",
+          "uploaded",
+          "partialFailureError"
+        ],
+        "additionalProperties": false
+      },
+      "SpendResponse": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "campaignId": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "costMicros": {
+                  "type": "string"
+                },
+                "observedCents": {
+                  "type": "number"
+                },
+                "declaredCents": {
+                  "type": "number"
+                },
+                "runId": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "lastSeenAt": {
+                  "type": "string"
+                },
+                "lastDeclaredAt": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "campaignId",
+                "date",
+                "costMicros",
+                "observedCents",
+                "declaredCents",
+                "runId",
+                "lastSeenAt",
+                "lastDeclaredAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "accountId",
+          "days"
+        ],
+        "additionalProperties": false
+      },
+      "SpendDay": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "costMicros": {
+            "type": "string"
+          },
+          "observedCents": {
+            "type": "number"
+          },
+          "declaredCents": {
+            "type": "number"
+          },
+          "runId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastSeenAt": {
+            "type": "string"
+          },
+          "lastDeclaredAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "campaignId",
+          "date",
+          "costMicros",
+          "observedCents",
+          "declaredCents",
+          "runId",
+          "lastSeenAt",
+          "lastDeclaredAt"
+        ],
+        "additionalProperties": false
+      },
       "ConversionAction": {
         "type": "object",
         "properties": {
@@ -2592,6 +2773,124 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DuplicateCampaignResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/conversions/upload": {
+      "post": {
+        "summary": "Upload offline click conversions (send a measured outcome back to Google)",
+        "description": "Reports an outcome to Google as a conversion attributed to the click that produced it (gclid/gbraid/wbraid), so Smart Bidding optimises on the real answer instead of a proxy. conversionDateTime must carry an explicit UTC offset. Set validateOnly to dry-run without uploading.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadConversionsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload result (uploaded counts only the rows Google accepted)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadConversionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/spend": {
+      "get": {
+        "summary": "Google Ads spend ledger, dated by Google's own reporting day",
+        "description": "Per-campaign, per-day spend observed from Google and how much of it has been declared as the org's cost (pass-through: 1 unit = 1 USD cent). Written by the independent spend-ingest cron, never by campaign create/update.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily spend rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendResponse"
                 }
               }
             }
