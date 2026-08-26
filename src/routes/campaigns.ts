@@ -1,9 +1,7 @@
 import { Router, Request, Response } from "express";
 import { query } from "../db/client";
-import { getRefreshToken, getGoogleCredentials, CallerContext } from "../services/key-service";
+import { resolveCustomer } from "../services/customer-resolver";
 import {
-  createGoogleAdsClient,
-  getCustomer,
   listCampaigns,
   getCampaignDetail,
   getCampaignPerformance,
@@ -34,23 +32,6 @@ import {
 
 const router = Router();
 
-const resolveCustomer = async (orgId: string, userId: string, accountId: string, caller: CallerContext, runId?: string, featureSlug?: string, brandId?: string) => {
-  const accountResult = await query(
-    `SELECT refresh_token_provider FROM accounts WHERE org_id = $1 AND account_id = $2`,
-    [orgId, accountId]
-  );
-  if (accountResult.rows.length === 0) {
-    throw new Error("Account not found");
-  }
-
-  const [refreshToken, creds] = await Promise.all([
-    getRefreshToken(orgId, userId, accountId, caller, runId, featureSlug, brandId),
-    getGoogleCredentials(caller, runId, featureSlug, brandId),
-  ]);
-  const client = createGoogleAdsClient(creds);
-  return getCustomer(client, refreshToken, accountId, creds.mccAccountId);
-};
-
 // GET /accounts/:accountId/campaigns
 router.get(
   "/accounts/:accountId/campaigns",
@@ -62,7 +43,7 @@ router.get(
       const { status } = req.validatedQuery as { status?: string };
 
       traceEvent(req.runId!, { service: "google-service", event: "campaigns-list-start", detail: `accountId=${accountId}, status=${status ?? "all"}` }, req.headers).catch(() => {});
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const campaigns = await listCampaigns(customer, status);
 
       traceEvent(req.runId!, { service: "google-service", event: "campaigns-list-done", detail: `accountId=${accountId}, count=${campaigns.length}` }, req.headers).catch(() => {});
@@ -90,7 +71,7 @@ router.get(
       };
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-detail-start", detail: `accountId=${accountId}, campaignId=${campaignId}` }, req.headers).catch(() => {});
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const campaign = await getCampaignDetail(customer, campaignId);
 
       if (!campaign) {
@@ -127,7 +108,7 @@ router.get(
         endDate: string;
       };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const metrics = await getCampaignPerformance(customer, campaignId, startDate, endDate);
 
       res.json({
@@ -152,7 +133,7 @@ router.get(
     try {
       const { accountId } = req.validatedParams as { accountId: string };
 
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const conversionActions = await listConversionActions(customer);
 
       res.json({ conversionActions });
@@ -172,18 +153,10 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { accountId } = req.validatedParams as { accountId: string };
-      const body = req.validatedBody as {
-        name: string;
-        advertisingChannelType: string;
-        status: string;
-        budgetAmountMicros: string;
-        biddingStrategy?: string;
-        startDate?: string;
-        endDate?: string;
-      };
+      const body = req.validatedBody as z.infer<typeof CreateCampaignBodySchema>;
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-create-start", detail: `accountId=${accountId}, name=${body.name}` }, req.headers).catch(() => {});
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const campaign = await createCampaign(customer, body);
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-create-done", detail: `accountId=${accountId}, campaignId=${campaign.id}` }, req.headers).catch(() => {});
@@ -213,15 +186,10 @@ router.patch(
         accountId: string;
         campaignId: string;
       };
-      const body = req.validatedBody as {
-        status?: string;
-        budgetAmountMicros?: string;
-        biddingStrategy?: string;
-        name?: string;
-      };
+      const body = req.validatedBody as z.infer<typeof UpdateCampaignBodySchema>;
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-update-start", detail: `accountId=${accountId}, campaignId=${campaignId}` }, req.headers).catch(() => {});
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const campaign = await updateCampaign(customer, campaignId, body);
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-update-done", detail: `campaignId=${campaignId}` }, req.headers).catch(() => {});
@@ -254,7 +222,7 @@ router.post(
       const body = req.validatedBody as { newName?: string };
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-duplicate-start", detail: `accountId=${accountId}, campaignId=${campaignId}` }, req.headers).catch(() => {});
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const campaign = await duplicateCampaign(customer, campaignId, body.newName);
 
       traceEvent(req.runId!, { service: "google-service", event: "campaign-duplicate-done", detail: `newCampaignId=${campaign.id}` }, req.headers).catch(() => {});
@@ -287,7 +255,7 @@ router.post(
       const body = req.validatedBody as z.infer<typeof UploadConversionsBodySchema>;
 
       traceEvent(req.runId!, { service: "google-service", event: "conversions-upload-start", detail: `accountId=${accountId}, count=${body.conversions.length}` }, req.headers).catch(() => {});
-      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, req.runId, req.featureSlug, req.brandId);
+      const customer = await resolveCustomer(req.orgId!, req.userId!, accountId, { method: req.method, path: req.route.path }, { runId: req.runId, featureSlug: req.featureSlug, brandId: req.brandId, audienceId: req.audienceId });
       const result = await uploadClickConversions(customer, body.conversions, {
         validateOnly: body.validateOnly,
       });

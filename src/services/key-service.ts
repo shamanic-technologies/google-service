@@ -118,6 +118,23 @@ export const getRefreshToken = async (
   return data.key;
 };
 
+/**
+ * The refresh token for OUR OWN agency manager account.
+ *
+ * The managed path advertises from our manager account, so the client supplies
+ * no Google credential at all. This is a PLATFORM key — never an org key — and
+ * it is the only credential the managed path needs beyond the OAuth client and
+ * the developer token.
+ */
+export const getManagerRefreshToken = async (
+  caller: CallerContext,
+  runId?: string,
+  featureSlug?: string,
+  brandId?: string,
+  audienceId?: string
+): Promise<string> =>
+  getPlatformKey("google-mcc-refresh-token", caller, runId, featureSlug, brandId, audienceId);
+
 export interface GoogleOAuthClient {
   clientId: string;
   clientSecret: string;

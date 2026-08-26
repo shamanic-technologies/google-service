@@ -183,6 +183,36 @@ export const SpendResponseSchema = z.object({
   days: z.array(SpendDaySchema),
 });
 
+// ─── Bidding strategy (settable at creation, changeable on a live campaign) ───
+
+export const BiddingStrategyTypeEnum = z.enum([
+  "MANUAL_CPC",
+  "MAXIMIZE_CLICKS",
+  "MAXIMIZE_CONVERSIONS",
+  "MAXIMIZE_CONVERSION_VALUE",
+  "TARGET_CPA",
+  "TARGET_ROAS",
+]);
+
+export const BiddingStrategySchema = z
+  .object({
+    type: BiddingStrategyTypeEnum,
+    enhancedCpcEnabled: z.boolean().optional(),
+    cpcBidCeilingMicros: z.string().regex(/^\d+$/).optional(),
+    targetCpaMicros: z.string().regex(/^\d+$/).optional(),
+    targetRoas: z.number().positive().optional(),
+  })
+  .refine((b) => b.type !== "TARGET_CPA" || Boolean(b.targetCpaMicros), {
+    message: "TARGET_CPA requires targetCpaMicros",
+  })
+  .refine((b) => b.type !== "TARGET_ROAS" || b.targetRoas !== undefined, {
+    message: "TARGET_ROAS requires targetRoas",
+  });
+
+export const UpdateBiddingBodySchema = z.object({
+  bidding: BiddingStrategySchema,
+});
+
 // ─── Create Campaign ───
 
 export const CreateCampaignBodySchema = z.object({
@@ -190,7 +220,8 @@ export const CreateCampaignBodySchema = z.object({
   advertisingChannelType: z.string().min(1),
   status: CampaignStatusEnum.default("PAUSED"),
   budgetAmountMicros: z.string().min(1),
-  biddingStrategy: z.string().optional(),
+  bidding: BiddingStrategySchema.optional(),
+  targetSearchNetwork: z.boolean().optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
@@ -205,7 +236,7 @@ export const CreateCampaignResponseSchema = z.object({
 export const UpdateCampaignBodySchema = z.object({
   status: CampaignStatusEnum.optional(),
   budgetAmountMicros: z.string().optional(),
-  biddingStrategy: z.string().optional(),
+  bidding: BiddingStrategySchema.optional(),
   name: z.string().optional(),
 });
 
@@ -223,6 +254,198 @@ export const DuplicateCampaignBodySchema = z.object({
 export const DuplicateCampaignResponseSchema = z.object({
   campaign: CampaignSchema,
   message: z.string(),
+});
+
+
+// ─── Serving stack: ad groups, keywords, negatives, responsive search ads ───
+
+export const AdGroupStatusEnum = z.enum(["ENABLED", "PAUSED", "REMOVED"]);
+export const KeywordMatchTypeEnum = z.enum(["EXACT", "PHRASE", "BROAD"]);
+
+export const AdGroupIdParamSchema = z.object({
+  accountId: z.string().min(1),
+  adGroupId: z.string().regex(/^\d+$/),
+});
+
+export const AdGroupCriterionParamSchema = AdGroupIdParamSchema.extend({
+  criterionId: z.string().regex(/^\d+$/),
+});
+
+export const AdGroupAdParamSchema = AdGroupIdParamSchema.extend({
+  adId: z.string().regex(/^\d+$/),
+});
+
+export const CampaignCriterionParamSchema = CampaignIdParamSchema.extend({
+  criterionId: z.string().regex(/^\d+$/),
+});
+
+export const CreateAdGroupBodySchema = z.object({
+  name: z.string().min(1),
+  status: AdGroupStatusEnum.optional(),
+  cpcBidMicros: z.string().regex(/^\d+$/).optional(),
+});
+
+export const UpdateAdGroupBodySchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    status: AdGroupStatusEnum.optional(),
+    cpcBidMicros: z.string().regex(/^\d+$/).optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: "no ad group fields to update" });
+
+export const AdGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.string(),
+  campaignId: z.string(),
+  cpcBidMicros: z.string().nullable(),
+  resourceName: z.string(),
+});
+
+export const AdGroupsResponseSchema = z.object({ adGroups: z.array(AdGroupSchema) });
+
+export const KeywordInputSchema = z.object({
+  text: z.string().min(1).max(80),
+  matchType: KeywordMatchTypeEnum,
+  cpcBidMicros: z.string().regex(/^\d+$/).optional(),
+  status: AdGroupStatusEnum.optional(),
+});
+
+export const AddKeywordsBodySchema = z.object({
+  keywords: z.array(KeywordInputSchema).min(1).max(2000),
+});
+
+export const NegativeKeywordInputSchema = z.object({
+  text: z.string().min(1).max(80),
+  matchType: KeywordMatchTypeEnum,
+});
+
+export const AddNegativeKeywordsBodySchema = z.object({
+  keywords: z.array(NegativeKeywordInputSchema).min(1).max(2000),
+});
+
+export const UpdateKeywordBodySchema = z.object({ status: AdGroupStatusEnum });
+
+export const CreatedCriterionSchema = z.object({
+  criterionId: z.string(),
+  text: z.string(),
+  matchType: z.string(),
+  resourceName: z.string(),
+});
+
+export const CreatedCriteriaResponseSchema = z.object({
+  keywords: z.array(CreatedCriterionSchema),
+});
+
+export const KeywordSchema = z.object({
+  criterionId: z.string(),
+  adGroupId: z.string(),
+  text: z.string(),
+  matchType: z.string(),
+  status: z.string(),
+  negative: z.boolean(),
+  cpcBidMicros: z.string().nullable(),
+  resourceName: z.string(),
+});
+
+export const KeywordsResponseSchema = z.object({ keywords: z.array(KeywordSchema) });
+
+export const CampaignNegativeKeywordSchema = z.object({
+  criterionId: z.string(),
+  campaignId: z.string(),
+  text: z.string(),
+  matchType: z.string(),
+  resourceName: z.string(),
+});
+
+export const CampaignNegativeKeywordsResponseSchema = z.object({
+  keywords: z.array(CampaignNegativeKeywordSchema),
+});
+
+// A variant may be pinned to a fixed serving position (compliance / brand
+// lines); every unpinned variant stays free for Google to test.
+export const AdTextAssetSchema = z.object({
+  text: z.string().min(1),
+  pinnedField: z
+    .enum(["HEADLINE_1", "HEADLINE_2", "HEADLINE_3", "DESCRIPTION_1", "DESCRIPTION_2"])
+    .optional(),
+});
+
+export const CreateResponsiveSearchAdBodySchema = z.object({
+  // Google's own limits for a responsive search ad.
+  headlines: z.array(AdTextAssetSchema).min(3).max(15),
+  descriptions: z.array(AdTextAssetSchema).min(2).max(4),
+  finalUrls: z.array(z.string().url()).min(1),
+  path1: z.string().max(15).optional(),
+  path2: z.string().max(15).optional(),
+  status: AdGroupStatusEnum.optional(),
+});
+
+export const UpdateAdBodySchema = z.object({ status: AdGroupStatusEnum });
+
+export const ResponsiveSearchAdSchema = z.object({
+  adId: z.string(),
+  adGroupId: z.string(),
+  status: z.string(),
+  headlines: z.array(AdTextAssetSchema),
+  descriptions: z.array(AdTextAssetSchema),
+  finalUrls: z.array(z.string()),
+  path1: z.string().nullable(),
+  path2: z.string().nullable(),
+  resourceName: z.string(),
+});
+
+export const AdsResponseSchema = z.object({ ads: z.array(ResponsiveSearchAdSchema) });
+
+export const CampaignServingStateSchema = z.object({
+  campaignId: z.string(),
+  status: z.string(),
+  servingStatus: z.string(),
+  primaryStatus: z.string().nullable(),
+  primaryStatusReasons: z.array(z.string()),
+});
+
+export const CampaignStructureResponseSchema = z.object({
+  campaignId: z.string(),
+  serving: CampaignServingStateSchema.nullable(),
+  adGroups: z.array(
+    AdGroupSchema.extend({
+      keywords: z.array(KeywordSchema),
+      negativeKeywords: z.array(KeywordSchema),
+      ads: z.array(ResponsiveSearchAdSchema),
+    })
+  ),
+  campaignNegativeKeywords: z.array(CampaignNegativeKeywordSchema),
+});
+
+// ─── Managed advertiser accounts (no customer-supplied credential) ───
+
+export const CreateManagedAccountBodySchema = z.object({
+  descriptiveName: z.string().min(1).max(255),
+  currencyCode: z.string().length(3),
+  // IANA time zone, e.g. "America/New_York".
+  timeZone: z.string().min(1),
+  brandId: z.string().min(1).optional(),
+});
+
+export const ManagedAccountSchema = z.object({
+  accountId: z.string(),
+  orgId: z.string(),
+  brandId: z.string().nullable(),
+  managerAccountId: z.string(),
+  descriptiveName: z.string(),
+  currencyCode: z.string(),
+  timeZone: z.string(),
+  createdAt: z.string(),
+});
+
+export const ManagedAccountsResponseSchema = z.object({
+  accounts: z.array(ManagedAccountSchema),
+});
+
+export const CreateManagedAccountResponseSchema = z.object({
+  account: ManagedAccountSchema,
+  created: z.boolean(),
 });
 
 // ─── Search ───

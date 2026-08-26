@@ -122,6 +122,61 @@ The money Google charges an org's campaigns becomes that org's declared cost. Ca
 
 `google_ads_spend_daily` — key `(org_id, account_id, campaign_id, spend_date)`; `cost_micros`, `observed_cents` (what Google reports now), `declared_cents` (what has been declared), `run_id`, `last_seen_at`, `last_declared_at`. Readable via `GET /accounts/{accountId}/spend`.
 
+## Advertiser resolution: managed by default, per-org OAuth still works
+
+We run the advertising ourselves, from our own agency manager account. **The managed path requires no customer-supplied Google credential** — the client never connects a Google account and never opens the Google Ads UI.
+
+`src/services/customer-resolver.ts` `resolveCustomer()` is the single place a request turns into a Google Ads customer. `login_customer_id` is ALWAYS the MCC; only the refresh token differs:
+
+| Path | When | Credential |
+|------|------|-----------|
+| `per-org` | a row exists in `accounts` for `(org, accountId)` | the org's own refresh token (`google-ads-refresh-<accountId>` in key-service) |
+| `managed` | a row exists in `google_ads_managed_accounts` for `(org, accountId)` | **platform key `google-mcc-refresh-token`** — our manager account's own token |
+
+Per-org WINS when both exist, so nothing that works today changes. An org that owns neither gets `Account not found` (404) — an org may never drive an account it does not own.
+
+`google-mcc-refresh-token` is a NEW platform key, alongside the existing `google-client-id` / `google-client-secret` / `google-developer-token` / `google-mcc-account-id`. Without it the managed path cannot resolve a credential and fails loud; the per-org path is unaffected.
+
+`POST /orgs/google-ads/managed-accounts` provisions a client account under our manager account (`CustomerService.CreateCustomerClient`) and records it in `google_ads_managed_accounts`. **Idempotent per brand**: a second call with the same `brandId` returns the existing account with `created: false` instead of minting a second one under the manager (partial unique index on `(org_id, brand_id) WHERE brand_id IS NOT NULL`).
+
+## The serving stack (everything BELOW the campaign)
+
+A Google Search campaign with nothing under it serves zero impressions. `src/services/google-ads-serving.ts` + `src/routes/serving.ts` own the layer that makes a campaign deliverable: the grouping level, the search terms it bids on and their match behaviour, the terms it must never bid on, and the ad itself.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST`/`GET` | `/accounts/{accountId}/campaigns/{campaignId}/ad-groups` | Ad groups (created `SEARCH_STANDARD` — the only type a Search campaign serves text ads from) |
+| `PATCH` | `/accounts/{accountId}/ad-groups/{adGroupId}` | Name / status / default CPC bid |
+| `POST`/`GET` | `/accounts/{accountId}/ad-groups/{adGroupId}/keywords` | Search terms + match type (`EXACT` \| `PHRASE` \| `BROAD`), batched |
+| `PATCH`/`DELETE` | `.../keywords/{criterionId}` | Pause / remove one keyword |
+| `POST`/`GET` | `.../ad-groups/{adGroupId}/negative-keywords` | Terms this ad group must never bid on |
+| `POST`/`GET`/`DELETE` | `.../campaigns/{campaignId}/negative-keywords[/{criterionId}]` | Campaign-wide negatives |
+| `POST`/`GET` | `.../ad-groups/{adGroupId}/ads` | Responsive search ad (3–15 headlines, 2–4 descriptions) |
+| `PATCH`/`DELETE` | `.../ads/{adId}` | Pause / remove one ad |
+| `PUT` | `/accounts/{accountId}/campaigns/{campaignId}/bidding` | Change the bidding approach on a LIVE campaign |
+| `GET` | `.../campaigns/{campaignId}/structure` | Read back EVERYTHING created for the campaign |
+| `GET` | `.../campaigns/{campaignId}/serving-state` | Google's own verdict on whether it can serve |
+
+**The ad is multi-asset by nature.** Google composes it at serve time from the variants that exist, so *picking which variants exist is how the ad is written*. A variant may carry `pinnedField` (`HEADLINE_1..3`, `DESCRIPTION_1..2`) to force a fixed position — needed for compliance and brand lines — while every unpinned variant stays free for Google to test. On readback, Google's `UNSPECIFIED` is reported as *unpinned*, never as a position.
+
+**Criterion and ad ids are composite.** Resource names are `customers/X/adGroupCriteria/<adGroupId>~<criterionId>` and `customers/X/adGroupAds/<adGroupId>~<adId>` — the id is what follows the tilde, which is why the parent id sits in the path on every update/delete route.
+
+**Readback is the anti-duplication mechanism.** `GET .../structure` returns the campaign's serving state plus each ad group with its keywords, its negatives and its ads, so a later workflow run sees what already exists and adjusts it rather than building a second copy.
+
+**Every Google rejection surfaces as a 502 carrying Google's own message** — including a policy refusal on ad copy. `Account not found` is the only 404. Nothing is swallowed, nothing is retried behind the caller's back, and a batch Google partially rejected is never reported as fully applied.
+
+**No spend is declared here.** The spend cron (below) remains the ONLY place Google spend becomes an org cost.
+
+### Bidding: settable at creation, changeable on a live campaign
+
+`src/services/bidding.ts` maps our strategy input onto Google's campaign bidding-scheme fields. Supported: `MANUAL_CPC`, `MAXIMIZE_CLICKS` (Google's `target_spend`), `MAXIMIZE_CONVERSIONS`, `MAXIMIZE_CONVERSION_VALUE`, `TARGET_CPA`, `TARGET_ROAS`.
+
+This is load-bearing, not a nicety: a new campaign has NO conversion history, so it launches click-based or manual and graduates to conversion-based bidding once enough conversions have accrued. Both the initial pick (`POST /accounts/{id}/campaigns` body `bidding`) and the later switch (`PUT .../bidding`) go through this service, and the switch never recreates the campaign — setting the new scheme field IS the switch, so the campaign keeps its id, its structure and its history.
+
+A strategy whose required companion value is missing (`TARGET_CPA` without `targetCpaMicros`, `TARGET_ROAS` without `targetRoas`) is rejected — a silently-dropped target would leave the campaign bidding on something the caller never asked for.
+
+A `SEARCH` campaign is created with explicit network settings (Google Search on, search partners on by default via `targetSearchNetwork`, display and partner-search off), so it never ends up opted into networks nobody asked for.
+
 ## Offline conversion upload (outcome → Google)
 
 `POST /accounts/{accountId}/conversions/upload` reports a measured outcome (a paid client) back to Google as a click conversion, attributed to the click that produced it — Smart Bidding can only optimise against conversions it has been told about. `uploadClickConversions()` in `src/services/google-ads.ts` wraps `ConversionUploadService.uploadClickConversions`.
