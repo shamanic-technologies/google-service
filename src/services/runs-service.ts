@@ -7,19 +7,26 @@ const baseHeaders = () => ({
 });
 
 export interface CreateRunParams {
-  parentRunId: string;
+  /** Caller's run id. Absent on cron paths (no inbound request → no parent run). */
+  parentRunId?: string;
   orgId: string;
   userId: string;
   service: string;
   featureSlug?: string;
   brandId?: string;
   audienceId?: string;
+  /** Optional task name; defaults to "request" for the per-request run. */
+  taskName?: string;
+  /** Globally-unique, self-namespaced dedup key. Replays return the original run. */
+  idempotencyKey?: string;
 }
 
 export interface CostItem {
   costName: string;
   quantity: number;
   costSource: "platform" | "org";
+  /** Per-run dedup key. Replays return the original cost row, no duplicate. */
+  idempotencyKey?: string;
 }
 
 export const createRun = async (params: CreateRunParams): Promise<string> => {
@@ -38,7 +45,8 @@ export const createRun = async (params: CreateRunParams): Promise<string> => {
     },
     body: JSON.stringify({
       serviceName: params.service,
-      taskName: "request",
+      taskName: params.taskName ?? "request",
+      ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
     }),
   });
 

@@ -3,6 +3,7 @@ import { env } from "./env";
 import { runMigrations } from "./db/migrate";
 import { backfillSilver } from "./services/backfill-silver";
 import { startAutoSync } from "./services/cron-sync";
+import { startSpendSync } from "./services/spend-cron";
 
 const main = async () => {
   await runMigrations();
@@ -20,6 +21,8 @@ const main = async () => {
     console.error("[google-service] silver backfill failed:", err)
   );
   startAutoSync();
+  // Google Ads spend ingestion — its own schedule, never chained to campaign work.
+  startSpendSync();
 
   process.on("unhandledRejection", (reason) => {
     console.error("[google-service] Unhandled rejection:", reason);

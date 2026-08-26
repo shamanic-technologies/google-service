@@ -36,6 +36,10 @@ const spec = {
       PerformanceResponse: toSchema(schemas.PerformanceResponseSchema),
       PerformanceMetrics: toSchema(schemas.PerformanceMetricsSchema),
       ConversionsResponse: toSchema(schemas.ConversionsResponseSchema),
+      UploadConversionsBody: toSchema(schemas.UploadConversionsBodySchema),
+      UploadConversionsResponse: toSchema(schemas.UploadConversionsResponseSchema),
+      SpendResponse: toSchema(schemas.SpendResponseSchema),
+      SpendDay: toSchema(schemas.SpendDaySchema),
       ConversionAction: toSchema(schemas.ConversionActionSchema),
       CreateCampaignBody: toSchema(schemas.CreateCampaignBodySchema),
       CreateCampaignResponse: toSchema(schemas.CreateCampaignResponseSchema),
@@ -406,6 +410,68 @@ const spec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/DuplicateCampaignResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/accounts/{accountId}/conversions/upload": {
+      post: {
+        summary: "Upload offline click conversions (send a measured outcome back to Google)",
+        description:
+          "Reports an outcome to Google as a conversion attributed to the click that produced it (gclid/gbraid/wbraid), so Smart Bidding optimises on the real answer instead of a proxy. conversionDateTime must carry an explicit UTC offset. Set validateOnly to dry-run without uploading.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "accountId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UploadConversionsBody" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Upload result (uploaded counts only the rows Google accepted)",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/UploadConversionsResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/accounts/{accountId}/spend": {
+      get: {
+        summary: "Google Ads spend ledger, dated by Google's own reporting day",
+        description:
+          "Per-campaign, per-day spend observed from Google and how much of it has been declared as the org's cost (pass-through: 1 unit = 1 USD cent). Written by the independent spend-ingest cron, never by campaign create/update.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "accountId", in: "path", required: true, schema: { type: "string" } },
+          { name: "startDate", in: "query", required: false, schema: { type: "string" } },
+          { name: "endDate", in: "query", required: false, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Daily spend rows",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SpendResponse" },
               },
             },
           },
