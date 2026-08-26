@@ -207,6 +207,30 @@ CREATE TABLE IF NOT EXISTS google_contact_links (
   UNIQUE(org_id, resource_name)
 );
 CREATE INDEX IF NOT EXISTS idx_google_contact_links_org_id ON google_contact_links(org_id);
+
+-- ─── Google Ads spend ledger (per campaign, per Google-reported day) ───
+-- One row per (org, Ads account, campaign, spend_date). cost_micros/observed_cents
+-- are what Google reports NOW; declared_cents is how much of it has already been
+-- declared to runs-service. Google restates a day's cost, so each pass declares
+-- only the DELTA (observed - declared) and never re-declares what it already did.
+-- spend_date is GOOGLE's day (segments.date), never our poll day.
+CREATE TABLE IF NOT EXISTS google_ads_spend_daily (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  campaign_id TEXT NOT NULL,
+  spend_date DATE NOT NULL,
+  cost_micros BIGINT NOT NULL,
+  observed_cents BIGINT NOT NULL,
+  declared_cents BIGINT NOT NULL DEFAULT 0,
+  run_id UUID,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_declared_at TIMESTAMPTZ,
+  UNIQUE(org_id, account_id, campaign_id, spend_date)
+);
+CREATE INDEX IF NOT EXISTS idx_google_ads_spend_daily_org_date ON google_ads_spend_daily(org_id, spend_date DESC);
+CREATE INDEX IF NOT EXISTS idx_google_ads_spend_daily_account ON google_ads_spend_daily(org_id, account_id, spend_date DESC);
 `;
 
 export const runMigrations = async (): Promise<void> => {

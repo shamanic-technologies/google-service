@@ -124,6 +124,65 @@ export const ConversionsResponseSchema = z.object({
   conversionActions: z.array(ConversionActionSchema),
 });
 
+// ─── Offline conversion upload (send the real outcome back to Google) ───
+
+export const ClickConversionSchema = z
+  .object({
+    // At least one click identifier is required — it is what ties the outcome
+    // back to the click that produced it.
+    gclid: z.string().min(1).optional(),
+    gbraid: z.string().min(1).optional(),
+    wbraid: z.string().min(1).optional(),
+    conversionActionId: z.string().min(1),
+    // Google requires an explicit UTC offset: "yyyy-mm-dd hh:mm:ss+|-hh:mm".
+    conversionDateTime: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/, {
+        message:
+          "conversionDateTime must be 'yyyy-mm-dd hh:mm:ss+|-hh:mm' (explicit UTC offset)",
+      }),
+    conversionValue: z.number().nonnegative().optional(),
+    currencyCode: z.string().length(3).optional(),
+    orderId: z.string().min(1).optional(),
+  })
+  .refine((c) => Boolean(c.gclid || c.gbraid || c.wbraid), {
+    message: "one of gclid, gbraid or wbraid is required",
+  });
+
+export const UploadConversionsBodySchema = z.object({
+  conversions: z.array(ClickConversionSchema).min(1).max(2000),
+  validateOnly: z.boolean().optional(),
+});
+
+export const UploadConversionsResponseSchema = z.object({
+  requested: z.number(),
+  uploaded: z.number(),
+  partialFailureError: z.string().nullable(),
+});
+
+// ─── Ads spend (declared cost ledger, dated by Google's own day) ───
+
+export const SpendQuerySchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+export const SpendDaySchema = z.object({
+  campaignId: z.string(),
+  date: z.string(),
+  costMicros: z.string(),
+  observedCents: z.number(),
+  declaredCents: z.number(),
+  runId: z.string().nullable(),
+  lastSeenAt: z.string(),
+  lastDeclaredAt: z.string().nullable(),
+});
+
+export const SpendResponseSchema = z.object({
+  accountId: z.string(),
+  days: z.array(SpendDaySchema),
+});
+
 // ─── Create Campaign ───
 
 export const CreateCampaignBodySchema = z.object({
