@@ -325,6 +325,8 @@ const spec = {
       GoogleContactLinks: toSchema(schemas.GoogleContactLinksSchema),
       GoogleContactItem: toSchema(schemas.GoogleContactItemSchema),
       GoogleContactsResponse: toSchema(schemas.GoogleContactsResponseSchema),
+    GoogleConversationResponse: toSchema(schemas.GoogleConversationResponseSchema),
+    GoogleConversationNotFound: toSchema(schemas.GoogleConversationNotFoundSchema),
       GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
@@ -1041,6 +1043,41 @@ const spec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/GoogleMessagesResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/orgs/google/conversation": {
+      get: {
+        summary: "Read the whole exchange with one person out of the Gmail mirror",
+        description:
+          "Every message exchanged with the given address, both directions, grouped by thread and ordered oldest first, with readable bodies derived from the stored Gmail payload. This is a read: it never calls Google. Org-scoped in the query itself. Three answers stay distinct: 404 reason=no_google_account_connected (no mailbox connected), 404 reason=no_messages (nobody has this exchange), and 200 with status=unreadable|partial (we hold it and could not read it). Inside a 200, a message with bodyStatus=\"empty\" genuinely says nothing, while bodyStatus=\"unavailable\" means its text is not readable from the stored payload.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "email", in: "query", required: true, schema: { type: "string" }, description: "The prospect's email address." },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500 }, description: "Maximum messages returned (default 200). When exceeded the most RECENT messages are kept and truncated=true." },
+        ],
+        responses: {
+          "200": {
+            description: "The exchange with this address, grouped by thread, oldest first",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleConversationResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "No mailbox connected for this org, or no exchange with this address",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleConversationNotFound" },
               },
             },
           },

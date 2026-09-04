@@ -190,6 +190,16 @@ CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_org ON gmail_messages_silve
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_sent ON gmail_messages_silver(org_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_thread ON gmail_messages_silver(thread_id);
 
+-- Participant lookup for the per-person conversation read
+-- (GET /orgs/google/conversation): find the threads an address appears in as a
+-- sender or a recipient, then pull every message of those threads.
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_from
+  ON gmail_messages_silver(org_id, lower(from_email));
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_to_emails
+  ON gmail_messages_silver USING GIN (to_emails);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_org_thread
+  ON gmail_messages_raw(org_id, thread_id);
+
 -- ─── Per-contact CRM links (org/brand/feature tagging + reserved status) ───
 -- One row per (org, Google contact resourceName). LEFT-JOINed onto
 -- GET /orgs/google/contacts; upserted via PUT /orgs/google/contact-links.

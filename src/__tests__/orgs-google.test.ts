@@ -920,3 +920,150 @@ describe("PUT /orgs/google/contact-links", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ─── GET /orgs/google/conversation ───
+
+const b64conv = (t: string) => Buffer.from(t, "utf-8").toString("base64url");
+
+describe("GET /orgs/google/conversation", () => {
+  const PROSPECT = "prospect@acme.com";
+  const OWNER = "owner@ourbrand.com";
+
+  it("returns the exchange with a prospect, both directions, oldest first, with bodies", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            gmail_message_id: "m2",
+            thread_id: "t1",
+            payload: { payload: { mimeType: "text/plain", body: { data: b64conv("Yes, send the deck.") } } },
+            fetched_at: new Date("2026-01-02T00:00:00Z"),
+            from_email: PROSPECT,
+            from_name: "Prospect",
+            to_emails: [OWNER],
+            subject: "Re: Quick question",
+            snippet: "Yes",
+            sent_at: new Date("2026-01-02T00:00:00Z"),
+            labels: ["INBOX"],
+          },
+          {
+            gmail_message_id: "m1",
+            thread_id: "t1",
+            payload: { payload: { mimeType: "text/plain", body: { data: b64conv("Are you the right person?") } } },
+            fetched_at: new Date("2026-01-01T00:00:00Z"),
+            from_email: OWNER,
+            from_name: "Owner",
+            to_emails: [PROSPECT],
+            subject: "Quick question",
+            snippet: "Are you",
+            sent_at: new Date("2026-01-01T00:00:00Z"),
+            labels: ["SENT"],
+          },
+        ],
+      });
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ok");
+    expect(res.body.threadCount).toBe(1);
+    expect(res.body.messageCount).toBe(2);
+    const msgs = res.body.threads[0].messages;
+    expect(msgs.map((m: { gmailMessageId: string }) => m.gmailMessageId)).toEqual(["m1", "m2"]);
+    expect(msgs.map((m: { direction: string }) => m.direction)).toEqual(["outbound", "inbound"]);
+    expect(msgs[1].bodyText).toBe("Yes, send the deck.");
+  });
+
+  it("scopes the read to the caller's org", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await request(app).get("/orgs/google/conversation").query({ email: PROSPECT }).set(idHeaders);
+
+    for (const call of mockQuery.mock.calls) {
+      expect(call[0]).toContain("org_id = $1");
+      expect((call[1] as unknown[])[0]).toBe(TEST_ORG_ID);
+    }
+  });
+
+  it("404s with reason=no_messages when nobody has this exchange", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+
+    expect(res.status).toBe(404);
+    expect(res.body.reason).toBe("no_messages");
+  });
+
+  it("404s with reason=no_google_account_connected when the org connected no mailbox", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+
+    expect(res.status).toBe(404);
+    expect(res.body.reason).toBe("no_google_account_connected");
+  });
+
+  it("answers 200 status=unreadable (never an empty conversation) when bodies cannot be read", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            gmail_message_id: "m1",
+            thread_id: "t1",
+            payload: { payload: { mimeType: "text/plain", body: { attachmentId: "att-1" } } },
+            fetched_at: new Date("2026-01-01T00:00:00Z"),
+            from_email: PROSPECT,
+            from_name: null,
+            to_emails: [OWNER],
+            subject: "Re: Quick question",
+            snippet: "…",
+            sent_at: new Date("2026-01-01T00:00:00Z"),
+            labels: ["INBOX"],
+          },
+        ],
+      });
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("unreadable");
+    expect(res.body.messageCount).toBe(1);
+    expect(res.body.threads[0].messages[0].bodyStatus).toBe("unavailable");
+  });
+
+  it("rejects a request with no email", async () => {
+    const res = await request(app).get("/orgs/google/conversation").set(idHeaders);
+    expect(res.status).toBe(400);
+  });
+
+  it("requires identity headers", async () => {
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT })
+      .set({ "x-api-key": "test-google-service-key", "x-user-id": TEST_USER_ID, "x-run-id": TEST_RUN_ID });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("x-org-id");
+  });
+});

@@ -601,6 +601,58 @@ export const GoogleMessagesResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+// ─── Per-person conversation read (GET /orgs/google/conversation) ───
+// The whole exchange with one address, both directions, grouped by thread,
+// oldest first, with readable bodies derived from the stored Gmail payload.
+
+export const GoogleConversationQuerySchema = z.object({
+  email: z.string().min(3),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+
+export const GoogleConversationBodyStatusEnum = z.enum(["ok", "empty", "unavailable"]);
+
+export const GoogleConversationMessageSchema = z.object({
+  gmailMessageId: z.string(),
+  threadId: z.string(),
+  direction: z.enum(["inbound", "outbound", "other"]),
+  fromEmail: z.string().nullable(),
+  fromName: z.string().nullable(),
+  to: z.array(z.string()),
+  subject: z.string().nullable(),
+  snippet: z.string().nullable(),
+  sentAt: z.string().nullable(),
+  labels: z.array(z.string()),
+  bodyText: z.string().nullable(),
+  bodyHtml: z.string().nullable(),
+  // "unavailable" (we hold it and could not read it) is NEVER the same answer
+  // as "empty" (it exists and says nothing).
+  bodyStatus: GoogleConversationBodyStatusEnum,
+});
+
+export const GoogleConversationThreadSchema = z.object({
+  threadId: z.string(),
+  subject: z.string().nullable(),
+  firstMessageAt: z.string().nullable(),
+  lastMessageAt: z.string().nullable(),
+  messageCount: z.number().int(),
+  messages: z.array(GoogleConversationMessageSchema),
+});
+
+export const GoogleConversationResponseSchema = z.object({
+  address: z.string(),
+  status: z.enum(["ok", "partial", "unreadable"]),
+  threadCount: z.number().int(),
+  messageCount: z.number().int(),
+  truncated: z.boolean(),
+  threads: z.array(GoogleConversationThreadSchema),
+});
+
+export const GoogleConversationNotFoundSchema = z.object({
+  error: z.string(),
+  reason: z.enum(["no_google_account_connected", "no_messages"]),
+});
+
 export const GoogleContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().optional(),
