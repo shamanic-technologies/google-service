@@ -92,37 +92,29 @@ export const getConversation = async (
     accounts.rows.map((r) => (r.email as string | null) ?? "").filter((e) => e.length > 0)
   );
 
-  // Threads this person appears in, matched on the typed silver fields (indexed
-  // on lower(from_email) and a GIN over to_emails). Every message of a matched
-  // thread is then returned, so the owner's own answer is part of the exchange
-  // even when the prospect is only a Cc on it.
+  // Threads this person appears in, matched entirely from INDEXES: lower(from_email)
+  // as sender, GIN over to_emails and cc_emails as recipient. Every message of a
+  // matched thread is then returned, so the owner's own answer is part of the
+  // exchange even when the prospect is only a Cc on it.
+  //
+  // Deliberately NO `payload::text ILIKE` fallback over bronze: on the real
+  // mirror (~660k messages) that scan took 75s and it ran on the MOST common
+  // question — an address we have never mailed — so the honest "nobody has this
+  // exchange" answer was the slowest one in the endpoint. Silver is written at
+  // ingest and rebuilt for every bronze row on boot, so From/To/Cc coverage is
+  // complete without it.
   const matched = await query(
     `SELECT DISTINCT thread_id
        FROM gmail_messages_silver
        WHERE org_id = $1
          AND thread_id IS NOT NULL
-         AND (lower(from_email) = $2 OR to_emails ? $2)`,
+         AND (lower(from_email) = $2 OR to_emails ? $2 OR cc_emails ? $2)`,
     [orgId, address]
   );
 
-  let threadIds = matched.rows
+  const threadIds = matched.rows
     .map((r) => r.thread_id as string | null)
     .filter((t): t is string => t !== null);
-
-  if (threadIds.length === 0) {
-    // Fallback for correspondents silver cannot see: a Cc-only participant, or
-    // a bronze row not yet parsed. Bounded cost — it only runs when the indexed
-    // match found nothing, so "nobody has this exchange" stays an honest answer.
-    const fallback = await query(
-      `SELECT DISTINCT thread_id
-         FROM gmail_messages_raw
-         WHERE org_id = $1 AND payload::text ILIKE $2`,
-      [orgId, `%${address}%`]
-    );
-    threadIds = fallback.rows
-      .map((r) => r.thread_id as string | null)
-      .filter((t): t is string => t !== null);
-  }
 
   if (threadIds.length === 0) return { found: false, reason: "no_messages" };
 

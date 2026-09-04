@@ -94,6 +94,21 @@ describe("parseMessageSilver", () => {
       ...overrides,
     }) as unknown as GmailMessage;
 
+  it("parses Cc participants (indexed match for a Cc-only correspondent)", () => {
+    const s = parseMessageSilver(
+      baseMessage({
+        payload: {
+          headers: [
+            { name: "From", value: "grace@navy.mil" },
+            { name: "To", value: "a@x.com" },
+            { name: "Cc", value: "Watcher <watch@z.com>, third@z.com" },
+          ],
+        },
+      } as Partial<GmailMessage>)
+    );
+    expect(s.cc).toEqual(["watch@z.com", "third@z.com"]);
+  });
+
   it("parses From/To/Subject headers and metadata", () => {
     const s = parseMessageSilver(baseMessage());
     expect(s.fromName).toBe("Grace Hopper");
