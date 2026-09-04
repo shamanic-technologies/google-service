@@ -78,6 +78,7 @@ export interface MessageSilver {
   fromEmail: string | null;
   fromName: string | null;
   to: string[];
+  cc: string[];
   subject: string | null;
   snippet: string | null;
   sentAt: string | null; // ISO
@@ -124,6 +125,7 @@ export const parseMessageSilver = (message: GmailMessage): MessageSilver => {
 
   const from = parseAddress(getHeader("From"));
   const to = parseAddressList(getHeader("To"));
+  const cc = parseAddressList(getHeader("Cc"));
   const subject = getHeader("Subject");
   const snippet = str(message.snippet);
 
@@ -146,6 +148,7 @@ export const parseMessageSilver = (message: GmailMessage): MessageSilver => {
     fromEmail: from.email,
     fromName: from.name,
     to,
+    cc,
     subject,
     snippet,
     sentAt,
@@ -224,14 +227,15 @@ export const upsertMessageSilver = async (
   await query(
     `INSERT INTO gmail_messages_silver
         (org_id, google_account_id, gmail_message_id, thread_id, from_email, from_name,
-         to_emails, subject, snippet, sent_at, labels, history_id, source_row_id, last_rebuilt_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, NOW())
+         to_emails, cc_emails, subject, snippet, sent_at, labels, history_id, source_row_id, last_rebuilt_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12::jsonb, $13, $14, NOW())
      ON CONFLICT (org_id, gmail_message_id) DO UPDATE SET
         google_account_id = EXCLUDED.google_account_id,
         thread_id = EXCLUDED.thread_id,
         from_email = EXCLUDED.from_email,
         from_name = EXCLUDED.from_name,
         to_emails = EXCLUDED.to_emails,
+        cc_emails = EXCLUDED.cc_emails,
         subject = EXCLUDED.subject,
         snippet = EXCLUDED.snippet,
         sent_at = EXCLUDED.sent_at,
@@ -247,6 +251,7 @@ export const upsertMessageSilver = async (
       s.fromEmail,
       s.fromName,
       JSON.stringify(s.to),
+      JSON.stringify(s.cc),
       s.subject,
       s.snippet,
       s.sentAt,

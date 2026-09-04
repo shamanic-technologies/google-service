@@ -55,8 +55,7 @@ describe("getConversation", () => {
   it("returns no_messages when nobody has this exchange", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] }) // accounts
-      .mockResolvedValueOnce({ rows: [] }) // silver participant match
-      .mockResolvedValueOnce({ rows: [] }); // bronze fallback
+      .mockResolvedValueOnce({ rows: [] }); // silver participant match
 
     const res = await getConversation(ORG, PROSPECT);
 
@@ -172,10 +171,9 @@ describe("getConversation", () => {
     expect(res.conversation.status).toBe("partial");
   });
 
-  it("falls back to the bronze payload match when silver sees no participant (cc-only)", async () => {
+  it("matches a Cc-only correspondent from the index, never by scanning bronze payloads", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
-      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ thread_id: "t7" }] })
       .mockResolvedValueOnce({ rows: [rawRow({ thread_id: "t7" })] });
 
@@ -183,7 +181,21 @@ describe("getConversation", () => {
     expect(res.found).toBe(true);
     if (!res.found) return;
     expect(res.conversation.threads[0].threadId).toBe("t7");
-    expect(mockQuery.mock.calls[2][0]).toContain("gmail_messages_raw");
+    expect(mockQuery.mock.calls[1][0]).toContain("cc_emails ? $2");
+  });
+
+  it("never scans the bronze payloads when nobody has the exchange", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await getConversation(ORG, PROSPECT);
+
+    expect(res).toEqual({ found: false, reason: "no_messages" });
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+    for (const call of mockQuery.mock.calls) {
+      expect(call[0]).not.toContain("payload::text ILIKE");
+    }
   });
 
   it("keeps the most recent messages and flags truncation past the limit", async () => {
