@@ -9,6 +9,7 @@ import {
   GoogleAuthCallbackQuerySchema,
   GoogleMessagesQuerySchema,
   GoogleContactsQuerySchema,
+  GoogleConversationQuerySchema,
   GoogleContactLinkPutBodySchema,
   GoogleSyncJobIdParamSchema,
 } from "../schemas";
@@ -23,6 +24,7 @@ import {
 } from "../services/google-oauth";
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
+import { getConversation } from "../services/conversation";
 
 const router = Router();
 
@@ -531,6 +533,47 @@ router.get(
         : null;
 
       res.json({ items, nextCursor });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── GET /orgs/google/conversation ───
+//
+// The whole exchange with one person, read out of the Gmail mirror: both
+// directions, grouped by thread, oldest first, with readable bodies (derived
+// from the stored payload — this endpoint never calls Google).
+//
+// Three distinct answers, deliberately not collapsed into one:
+//   404 reason=no_google_account_connected — this org has connected no mailbox
+//   404 reason=no_messages                 — nobody has this exchange
+//   200 status=unreadable|partial          — we hold it and could not read it
+// and, inside a 200, a message with bodyStatus="empty" genuinely says nothing.
+// Returning an empty conversation for an unreadable one would tell a customer
+// the prospect said nothing.
+router.get(
+  "/conversation",
+  validateQuery(GoogleConversationQuerySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const q = req.validatedQuery as { email: string; limit?: number };
+
+      const result = await getConversation(orgId, q.email, q.limit);
+
+      if (!result.found) {
+        res.status(404).json({
+          error:
+            result.reason === "no_google_account_connected"
+              ? "No Google account is connected for this org"
+              : "No conversation with this address in the Gmail mirror",
+          reason: result.reason,
+        });
+        return;
+      }
+
+      res.json(result.conversation);
     } catch (err) {
       next(err);
     }
