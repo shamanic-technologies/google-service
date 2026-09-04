@@ -197,6 +197,17 @@ CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_from
   ON gmail_messages_silver(org_id, lower(from_email));
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_to_emails
   ON gmail_messages_silver USING GIN (to_emails);
+
+-- Cc participants, so the conversation read can match a Cc-only correspondent
+-- from an INDEX instead of scanning the bronze payloads. Backfilled on boot
+-- like every other silver column.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'gmail_messages_silver' AND column_name = 'cc_emails') THEN
+    ALTER TABLE gmail_messages_silver ADD COLUMN cc_emails JSONB NOT NULL DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_cc_emails
+  ON gmail_messages_silver USING GIN (cc_emails);
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_org_thread
   ON gmail_messages_raw(org_id, thread_id);
 
