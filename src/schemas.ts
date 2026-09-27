@@ -710,7 +710,9 @@ export const GoogleContactsResponseSchema = z.object({
 
 export const GoogleAccountSummarySchema = z.object({
   email: z.string(),
-  status: z.literal("active"),
+  status: z.enum(["active", "gmail_unavailable"]),
+  gmailUnavailableReason: z.string().nullable(),
+  gmailUnavailableSince: z.string().nullable(),
   scopes: z.array(z.string()),
   connectedAt: z.string(),
 });

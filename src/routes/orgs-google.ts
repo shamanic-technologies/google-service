@@ -169,7 +169,8 @@ router.get(
     try {
       const orgId = req.orgId!;
       const result = await query(
-        `SELECT google_account_email, scopes, created_at
+        `SELECT google_account_email, scopes, created_at,
+                gmail_unavailable_at, gmail_unavailable_reason
            FROM google_oauth_tokens
            WHERE org_id = $1
            ORDER BY created_at ASC`,
@@ -178,7 +179,13 @@ router.get(
 
       const accounts = result.rows.map((row) => ({
         email: row.google_account_email as string,
-        status: "active" as const,
+        // gmail_unavailable: Google says this mailbox has no Gmail, so its mirror is
+        // frozen at gmailUnavailableSince until the owner reconnects or re-enables it.
+        status: row.gmail_unavailable_at ? ("gmail_unavailable" as const) : ("active" as const),
+        gmailUnavailableReason: (row.gmail_unavailable_reason as string | null) ?? null,
+        gmailUnavailableSince: row.gmail_unavailable_at
+          ? (row.gmail_unavailable_at as Date).toISOString()
+          : null,
         scopes: (row.scopes as string).split(" ").filter((s) => s.length > 0),
         connectedAt: (row.created_at as Date).toISOString(),
       }));
@@ -563,6 +570,8 @@ router.get(
       const result = await getConversation(orgId, q.email, q.limit);
 
       if (!result.found) {
+        // Both reasons are documented answers, not failures: the run completed.
+        res.locals.documentedAnswer = true;
         res.status(404).json({
           error:
             result.reason === "no_google_account_connected"

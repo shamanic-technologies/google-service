@@ -697,6 +697,8 @@ describe("GET /orgs/google/accounts", () => {
           google_account_email: "bob@example.com",
           scopes: "https://www.googleapis.com/auth/gmail.readonly",
           created_at: new Date("2026-05-02T12:00:00.000Z"),
+          gmail_unavailable_at: new Date("2026-08-02T04:19:00.000Z"),
+          gmail_unavailable_reason: "mail_service_not_enabled",
         },
       ],
     });
@@ -712,6 +714,14 @@ describe("GET /orgs/google/accounts", () => {
         "https://www.googleapis.com/auth/contacts.readonly",
       ],
       connectedAt: "2026-05-01T12:00:00.000Z",
+      gmailUnavailableReason: null,
+      gmailUnavailableSince: null,
+    });
+    // A mailbox Google says has no Gmail reads as such, with when it stopped.
+    expect(res.body.accounts[1]).toMatchObject({
+      status: "gmail_unavailable",
+      gmailUnavailableReason: "mail_service_not_enabled",
+      gmailUnavailableSince: "2026-08-02T04:19:00.000Z",
     });
 
     const sql = mockQuery.mock.calls[0][0] as string;
@@ -1006,6 +1016,22 @@ describe("GET /orgs/google/conversation", () => {
 
     expect(res.status).toBe(404);
     expect(res.body.reason).toBe("no_messages");
+    // A documented "nobody has this exchange" answer is a completed run, not a failed one.
+    await vi.waitFor(() => expect(mockUpdateRun).toHaveBeenCalled());
+    expect(mockUpdateRun.mock.calls.at(-1)?.[1]).toBe("completed");
+  });
+
+  it("records a failed run when the read genuinely fails", async () => {
+    mockQuery.mockRejectedValueOnce(new Error("db down"));
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+
+    expect(res.status).toBe(500);
+    await vi.waitFor(() => expect(mockUpdateRun).toHaveBeenCalled());
+    expect(mockUpdateRun.mock.calls.at(-1)?.[1]).toBe("failed");
   });
 
   it("404s with reason=no_google_account_connected when the org connected no mailbox", async () => {
