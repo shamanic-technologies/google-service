@@ -4,12 +4,14 @@ import {
   GoogleApiError,
   getGmailMessage,
   getGmailProfile,
+  isMailServiceNotEnabledError,
   listGmailHistory,
   listGmailMessages,
   withTokenRetry,
 } from "./google-api";
 import {
   createAccessTokenProvider,
+  setGmailUnavailable,
   updateGmailHistoryId,
   type AccessTokenProvider,
   type GoogleAccountToken,
@@ -79,7 +81,25 @@ export const ingestGmailForAccount = async (
   const provider = createAccessTokenProvider(account, caller, runId, featureSlug, brandId);
   const result: GmailIngestResult = { inserted: 0, updated: 0, unchanged: 0 };
 
-  const profile = await withTokenRetry(provider, (t) => getGmailProfile(t));
+  let profile: Awaited<ReturnType<typeof getGmailProfile>>;
+  try {
+    profile = await withTokenRetry(provider, (t) => getGmailProfile(t));
+  } catch (err) {
+    if (!isMailServiceNotEnabledError(err)) throw err;
+    // The mailbox has no Gmail. Record it (readable on GET /orgs/google/accounts)
+    // and skip Gmail for this account rather than failing the whole org sync on
+    // every tick. The next successful profile read clears it.
+    if (!account.gmailUnavailableAt) {
+      console.warn(
+        `[google-service] gmail unavailable for account ${account.id} (org=${account.orgId}): mail service not enabled; mirror frozen until reconnected`
+      );
+    }
+    await setGmailUnavailable(account.orgId, account.id, "mail_service_not_enabled");
+    return result;
+  }
+  if (account.gmailUnavailableAt) {
+    await setGmailUnavailable(account.orgId, account.id, null);
+  }
   const latestHistoryId = profile.historyId;
 
   if (account.gmailHistoryId) {

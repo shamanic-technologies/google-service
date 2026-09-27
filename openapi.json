@@ -3492,8 +3492,17 @@
           "status": {
             "type": "string",
             "enum": [
-              "active"
+              "active",
+              "gmail_unavailable"
             ]
+          },
+          "gmailUnavailableReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "gmailUnavailableSince": {
+            "type": "string",
+            "nullable": true
           },
           "scopes": {
             "type": "array",
@@ -3508,6 +3517,8 @@
         "required": [
           "email",
           "status",
+          "gmailUnavailableReason",
+          "gmailUnavailableSince",
           "scopes",
           "connectedAt"
         ],
@@ -3527,8 +3538,17 @@
                 "status": {
                   "type": "string",
                   "enum": [
-                    "active"
+                    "active",
+                    "gmail_unavailable"
                   ]
+                },
+                "gmailUnavailableReason": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "gmailUnavailableSince": {
+                  "type": "string",
+                  "nullable": true
                 },
                 "scopes": {
                   "type": "array",
@@ -3543,6 +3563,8 @@
               "required": [
                 "email",
                 "status",
+                "gmailUnavailableReason",
+                "gmailUnavailableSince",
                 "scopes",
                 "connectedAt"
               ],

@@ -14,6 +14,7 @@ export interface GoogleAccountToken {
   gmailHistoryId: string | null;
   peopleSyncToken: string | null;
   otherContactsSyncToken: string | null;
+  gmailUnavailableAt: Date | null;
 }
 
 const ACCESS_TOKEN_LEEWAY_MS = 60_000;
@@ -24,7 +25,8 @@ export const listOrgGoogleAccounts = async (
   const result = await query(
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
-            gmail_history_id, people_sync_token, other_contacts_sync_token
+            gmail_history_id, people_sync_token, other_contacts_sync_token,
+            gmail_unavailable_at
        FROM google_oauth_tokens
        WHERE org_id = $1
        ORDER BY created_at ASC`,
@@ -40,7 +42,8 @@ export const getGoogleAccountById = async (
   const result = await query(
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
-            gmail_history_id, people_sync_token, other_contacts_sync_token
+            gmail_history_id, people_sync_token, other_contacts_sync_token,
+            gmail_unavailable_at
        FROM google_oauth_tokens
        WHERE org_id = $1 AND id = $2`,
     [orgId, id]
@@ -61,6 +64,7 @@ const rowToToken = (row: Record<string, unknown>): GoogleAccountToken => ({
   gmailHistoryId: row.gmail_history_id == null ? null : String(row.gmail_history_id),
   peopleSyncToken: (row.people_sync_token as string | null) ?? null,
   otherContactsSyncToken: (row.other_contacts_sync_token as string | null) ?? null,
+  gmailUnavailableAt: (row.gmail_unavailable_at as Date | null) ?? null,
 });
 
 export const upsertGoogleToken = async (params: {
@@ -104,6 +108,22 @@ export const upsertGoogleToken = async (params: {
     ]
   );
   return rowToToken(result.rows[0]);
+};
+
+export const setGmailUnavailable = async (
+  orgId: string,
+  id: string,
+  reason: string | null
+): Promise<void> => {
+  await query(
+    `UPDATE google_oauth_tokens
+       SET gmail_unavailable_at = CASE WHEN $3::text IS NULL THEN NULL
+                                       ELSE COALESCE(gmail_unavailable_at, NOW()) END,
+           gmail_unavailable_reason = $3::text,
+           updated_at = NOW()
+       WHERE org_id = $1 AND id = $2`,
+    [orgId, id, reason]
+  );
 };
 
 export const updateGmailHistoryId = async (
