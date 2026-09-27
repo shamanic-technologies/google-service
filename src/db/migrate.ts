@@ -96,6 +96,12 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Set when Google answers that the connected mailbox has no Gmail ("Mail service
+-- not enabled"): the connection is kept, its mirror is frozen, and the account
+-- reads as gmail_unavailable until a sync succeeds again (which clears it).
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS gmail_unavailable_at TIMESTAMPTZ;
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS gmail_unavailable_reason TEXT;
+
 CREATE TABLE IF NOT EXISTS gmail_messages_raw (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id TEXT NOT NULL,

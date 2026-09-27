@@ -23,7 +23,11 @@ export const createRequestRun = async (
     console.log(`[google-service] Run created: runId=${runId} parentRunId=${parentRunId ?? "none"}`);
 
     res.on("finish", () => {
-      const status = res.statusCode < 400 ? "completed" : "failed";
+      // A route that answered with one of its own DOCUMENTED outcomes (e.g. the
+      // conversation read's 404 "nobody has this exchange") did its job: that is a
+      // completed run, not a failed one. Routes mark it via res.locals.documentedAnswer.
+      const status =
+        res.statusCode < 400 || res.locals.documentedAnswer === true ? "completed" : "failed";
       updateRun(runId, status, req.orgId!, req.userId!, req.featureSlug, req.brandId, req.audienceId).catch((err) => {
         console.error(`[google-service] Failed to close run ${runId} as ${status}:`, err);
       });

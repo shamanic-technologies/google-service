@@ -8,6 +8,7 @@ const {
   mockListGmailHistory,
   mockCreateAccessTokenProvider,
   mockUpdateGmailHistoryId,
+  mockSetGmailUnavailable,
   mockProviderGet,
   mockProviderForceRefresh,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   mockListGmailHistory: vi.fn(),
   mockCreateAccessTokenProvider: vi.fn(),
   mockUpdateGmailHistoryId: vi.fn(),
+  mockSetGmailUnavailable: vi.fn(),
   mockProviderGet: vi.fn(),
   mockProviderForceRefresh: vi.fn(),
 }));
@@ -52,6 +54,7 @@ vi.mock("../services/google-tokens", async () => {
     ...actual,
     createAccessTokenProvider: (...args: unknown[]) => mockCreateAccessTokenProvider(...args),
     updateGmailHistoryId: (...args: unknown[]) => mockUpdateGmailHistoryId(...args),
+    setGmailUnavailable: (...args: unknown[]) => mockSetGmailUnavailable(...args),
   };
 });
 
@@ -82,6 +85,7 @@ const makeAccount = (overrides: Partial<GoogleAccountToken> = {}): GoogleAccount
   gmailHistoryId: null,
   peopleSyncToken: null,
   otherContactsSyncToken: null,
+  gmailUnavailableAt: null,
   ...overrides,
 });
 
@@ -191,5 +195,47 @@ describe("ingestGmailForAccount — backfill token refresh mid-loop", () => {
     expect(mockProviderForceRefresh).not.toHaveBeenCalled();
     // A failed backfill must NOT persist the history id (would skip a full backfill).
     expect(mockUpdateGmailHistoryId).not.toHaveBeenCalled();
+  });
+});
+
+describe("ingestGmailForAccount — mailbox with no Gmail", () => {
+  const notEnabled = () =>
+    new GoogleApiError(
+      400,
+      "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+      '{"error":{"code":400,"message":"Mail service not enabled","status":"FAILED_PRECONDITION"}}'
+    );
+
+  it("records the account as gmail-unavailable and skips Gmail instead of failing the sync", async () => {
+    mockGetGmailProfile.mockRejectedValueOnce(notEnabled());
+    const result = await ingestGmailForAccount(makeAccount(), caller, TEST_RUN_ID, undefined, undefined);
+    expect(result).toEqual({ inserted: 0, updated: 0, unchanged: 0 });
+    expect(mockSetGmailUnavailable).toHaveBeenCalledWith(TEST_ORG_ID, TEST_ACCOUNT_ID, "mail_service_not_enabled");
+    expect(mockListGmailMessages).not.toHaveBeenCalled();
+    expect(mockUpdateGmailHistoryId).not.toHaveBeenCalled();
+  });
+
+  it("clears the flag once the profile reads again", async () => {
+    routeQuery([]);
+    mockListGmailHistory.mockResolvedValue({ history: [], historyId: "999" });
+    mockListGmailMessages.mockResolvedValue({ messages: [] });
+    await ingestGmailForAccount(
+      makeAccount({ gmailUnavailableAt: new Date("2026-08-02T00:00:00Z"), gmailHistoryId: "10" }),
+      caller,
+      TEST_RUN_ID,
+      undefined,
+      undefined
+    );
+    expect(mockSetGmailUnavailable).toHaveBeenCalledWith(TEST_ORG_ID, TEST_ACCOUNT_ID, null);
+  });
+
+  it("still throws on any other Google failure", async () => {
+    mockGetGmailProfile.mockRejectedValueOnce(
+      new GoogleApiError(500, "https://gmail.googleapis.com/gmail/v1/users/me/profile", "boom")
+    );
+    await expect(
+      ingestGmailForAccount(makeAccount(), caller, TEST_RUN_ID, undefined, undefined)
+    ).rejects.toThrow("500");
+    expect(mockSetGmailUnavailable).not.toHaveBeenCalled();
   });
 });

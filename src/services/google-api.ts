@@ -27,6 +27,15 @@ export const isExpiredSyncTokenError = (err: unknown): boolean =>
   err.status === 400 &&
   err.body.includes("EXPIRED_SYNC_TOKEN");
 
+// Google answers HTTP 400 FAILED_PRECONDITION "Mail service not enabled" when the
+// connected account has no Gmail (a Workspace user whose Gmail licence was removed,
+// a non-Gmail Google account). Not transient: retrying changes nothing until the
+// owner re-enables Gmail or connects another mailbox.
+export const isMailServiceNotEnabledError = (err: unknown): boolean =>
+  err instanceof GoogleApiError &&
+  err.status === 400 &&
+  err.body.includes("Mail service not enabled");
+
 // Run a token-authenticated Google call, refreshing the access token and
 // retrying ONCE on a 401. Google access tokens live ~1h; a long backfill loop
 // (15k+ messages fetched one-by-one) outlasts a single token, so every call
