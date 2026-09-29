@@ -327,6 +327,7 @@ const spec = {
       GoogleContactsResponse: toSchema(schemas.GoogleContactsResponseSchema),
     GoogleConversationResponse: toSchema(schemas.GoogleConversationResponseSchema),
     GoogleConversationNotFound: toSchema(schemas.GoogleConversationNotFoundSchema),
+GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoundSchema),
       GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
@@ -1080,6 +1081,33 @@ const spec = {
                 schema: { $ref: "#/components/schemas/GoogleConversationNotFound" },
               },
             },
+          },
+        },
+      },
+    },
+    "/internal/staff-mailboxes/conversation": {
+      get: {
+        summary: "Read the exchange between one person and our staff, out of the staff Gmail mirrors",
+        description:
+          "Internal, service-to-service. Reads only mailboxes whose Google account is a staff address, across every org that mirrors one, and returns only the messages BETWEEN a staff address and the given person (staff -> person with the person in To/Cc, or person -> staff with a staff address in To/Cc). Never the rest of a thread, never any other message of the mailbox. Same response shape as /orgs/google/conversation; direction is always inbound or outbound. 404 reason=no_staff_mailbox_connected (no staff mailbox mirrored) and 404 reason=no_messages (no such exchange) are documented answers.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "email", in: "query", required: true, schema: { type: "string" }, description: "The prospect's email address." },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500 }, description: "Maximum messages returned (default 200). When exceeded the most RECENT messages are kept and truncated=true." },
+        ],
+        responses: {
+          "200": {
+            description: "The staff exchange with this address, grouped by thread, oldest first",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleConversationResponse" } } },
+          },
+          "404": {
+            description: "No staff mailbox mirrored, or no staff exchange with this address",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleStaffConversationNotFound" } } },
           },
         },
       },

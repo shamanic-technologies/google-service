@@ -1,6 +1,7 @@
 import { query } from "../db/client";
 import type { GmailMessage } from "./google-api";
 import { extractMessageBody, type BodyStatus } from "./message-body";
+import { STAFF_ADDRESSES } from "../lib/staff-mailboxes";
 
 // Read the whole exchange with one person out of the Gmail mirror.
 //
@@ -134,18 +135,35 @@ export const getConversation = async (
 
   const truncated = rows.rows.length > limit;
   const kept = (truncated ? rows.rows.slice(0, limit) : rows.rows) as unknown as MessageRow[];
-  const ordered = [...kept].reverse(); // oldest first
+
+  return {
+    found: true,
+    conversation: shapeConversation(address, kept, truncated, (fromEmail) =>
+      fromEmail === address ? "inbound" : fromEmail && ownEmails.has(fromEmail) ? "outbound" : "other"
+    ),
+  };
+};
+
+/**
+ * Newest-first rows (at most `limit`) -> the oldest-first conversation shape both reads serve.
+ * `directionOf` receives the lower-cased sender; each read decides what "ours" means.
+ */
+const shapeConversation = (
+  address: string,
+  newestFirst: MessageRow[],
+  truncated: boolean,
+  directionOf: (fromEmail: string | null) => MessageDirection
+): Conversation => {
+  const ordered = [...newestFirst].reverse(); // oldest first
 
   const messages: ConversationMessage[] = ordered.map((row) => {
     const body = extractMessageBody(row.payload as GmailMessage);
     const fromEmail = row.from_email ? row.from_email.toLowerCase() : null;
-    const direction: MessageDirection =
-      fromEmail === address ? "inbound" : fromEmail && ownEmails.has(fromEmail) ? "outbound" : "other";
 
     return {
       gmailMessageId: row.gmail_message_id,
       threadId: row.thread_id ?? "",
-      direction,
+      direction: directionOf(fromEmail),
       fromEmail: row.from_email ?? null,
       fromName: row.from_name ?? null,
       to: row.to_emails ?? [],
@@ -182,14 +200,76 @@ export const getConversation = async (
     unreadable === 0 ? "ok" : unreadable === messages.length ? "unreadable" : "partial";
 
   return {
+    address,
+    status,
+    threadCount: threads.length,
+    messageCount: messages.length,
+    truncated,
+    threads,
+  };
+};
+
+export type StaffConversationResult =
+  | { found: true; conversation: Conversation }
+  | { found: false; reason: "no_staff_mailbox_connected" | "no_messages" };
+
+/**
+ * The exchange between ONE person and our STAFF, read out of the staff's own Gmail mirrors.
+ *
+ * Staff answer prospects by hand from their own mailbox, on behalf of whichever brand they
+ * operate. Those messages live under the staff member's org, never under the client's, so the
+ * client-scoped read above cannot see them. This read is the one place that crosses orgs, and it
+ * is narrow by construction:
+ *
+ * - Only mailboxes whose Google account is a STAFF address are read (`STAFF_ADDRESSES`).
+ * - Only messages BETWEEN a staff address and this person are returned: sent by a staff address
+ *   with this person in To/Cc, or sent by this person with a staff address in To/Cc. Not the whole
+ *   thread — a message in the same thread between staff and anyone else never leaves the mailbox.
+ *   The filter is in the SQL, so nothing else is ever loaded, let alone returned.
+ * - Direction is therefore always "outbound" (staff -> person) or "inbound" (person -> staff).
+ */
+export const getStaffConversation = async (
+  addressRaw: string,
+  limit: number = DEFAULT_LIMIT
+): Promise<StaffConversationResult> => {
+  const address = addressRaw.trim().toLowerCase();
+  const staff = [...STAFF_ADDRESSES];
+
+  const accounts = await query(
+    `SELECT id, org_id FROM google_oauth_tokens WHERE lower(google_account_email) = ANY($1::text[])`,
+    [staff]
+  );
+  if (accounts.rows.length === 0) return { found: false, reason: "no_staff_mailbox_connected" };
+
+  const accountIds = accounts.rows.map((r) => r.id as string);
+  const orgIds = [...new Set(accounts.rows.map((r) => r.org_id as string))];
+
+  const rows = await query(
+    `SELECT m.gmail_message_id, m.thread_id, m.payload, m.fetched_at,
+            s.from_email, s.from_name, s.to_emails, s.subject, s.snippet, s.sent_at, s.labels
+       FROM gmail_messages_silver s
+       JOIN gmail_messages_raw m
+         ON m.org_id = s.org_id AND m.gmail_message_id = s.gmail_message_id
+       WHERE s.org_id = ANY($1::text[])
+         AND s.google_account_id = ANY($2::uuid[])
+         AND (
+               (lower(s.from_email) = ANY($3::text[]) AND (s.to_emails ? $4 OR s.cc_emails ? $4))
+            OR (lower(s.from_email) = $4 AND (s.to_emails ?| $3::text[] OR s.cc_emails ?| $3::text[]))
+         )
+       ORDER BY COALESCE(s.sent_at, m.fetched_at) DESC, m.gmail_message_id DESC
+       LIMIT $5`,
+    [orgIds, accountIds, staff, address, limit + 1]
+  );
+
+  if (rows.rows.length === 0) return { found: false, reason: "no_messages" };
+
+  const truncated = rows.rows.length > limit;
+  const kept = (truncated ? rows.rows.slice(0, limit) : rows.rows) as unknown as MessageRow[];
+
+  return {
     found: true,
-    conversation: {
-      address,
-      status,
-      threadCount: threads.length,
-      messageCount: messages.length,
-      truncated,
-      threads,
-    },
+    conversation: shapeConversation(address, kept, truncated, (fromEmail) =>
+      fromEmail === address ? "inbound" : "outbound"
+    ),
   };
 };
