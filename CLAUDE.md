@@ -87,6 +87,13 @@ The mirror holds exchanges the outreach provider never saw — a forwarding rule
 - **Ordering + truncation.** Threads oldest-first by their first message, messages oldest-first inside each. Past `limit` the MOST RECENT messages are kept and `truncated: true` is returned — an exchange is never silently cut at its head without saying so.
 - `direction` is `inbound` (from the prospect), `outbound` (from one of the org's connected Google accounts) or `other`.
 
+### Staff exchange read (`GET /internal/staff-mailboxes/conversation`) — the ONE cross-org read
+
+Staff operate client brands as the agency and answer prospects by hand from their own Gmail, which is mirrored under the STAFF member's org, never the client's. So `/orgs/google/conversation` (org-scoped) cannot see those messages from a client's lead page. This read exists for exactly that and is narrow by construction (`getStaffConversation` in `src/services/conversation.ts`):
+- **Which mailboxes**: only tokens whose `google_account_email` is in `STAFF_ADDRESSES` (`src/lib/staff-mailboxes.ts`, hardcoded and byte-equal with the fleet's staff allowlists: dashboard/admin `admin-allowlist.ts`, api-service `STAFF_EMAILS`). A mailbox a staff member connected under another address (e.g. a Pressbeat one) is NOT read.
+- **Which messages**: only those BETWEEN a staff address and the person — staff sender with the person in To/Cc, or the person as sender with a staff address in To/Cc. The filter is in the SQL; there is NO thread expansion (a same-thread message between staff and someone else never leaves the mailbox). Direction is therefore always `outbound`/`inbound`.
+- **Internal**: not proxied by api-service; the caller (lead-service lead history) decides who may see it. 404 `no_staff_mailbox_connected` / `no_messages` are documented answers (run completed). Measured on the 673k-message mirror: ~45ms with a match, ~7ms without.
+
 ### Idempotency strategy: upsert-when-different
 
 Sync re-runs produce no duplicate rows because each bronze table has a `UNIQUE` constraint on its natural key:

@@ -6,6 +6,7 @@ import campaignsRoutes from "./routes/campaigns";
 import servingRoutes from "./routes/serving";
 import searchRoutes from "./routes/search";
 import orgsGoogleRoutes from "./routes/orgs-google";
+import internalStaffMailboxRoutes from "./routes/internal-staff-mailboxes";
 import { errorHandler } from "./middleware/error-handler";
 import { requireIdentityHeaders } from "./middleware/validate";
 import { createRequestRun } from "./middleware/create-request-run";
@@ -41,6 +42,7 @@ export const createApp = () => {
   app.use(servingRoutes);
   app.use(searchRoutes);
   app.use("/orgs/google", orgsGoogleRoutes);
+  app.use(internalStaffMailboxRoutes);
 
   app.use(errorHandler);
 

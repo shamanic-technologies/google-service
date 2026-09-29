@@ -653,6 +653,11 @@ export const GoogleConversationNotFoundSchema = z.object({
   reason: z.enum(["no_google_account_connected", "no_messages"]),
 });
 
+export const GoogleStaffConversationNotFoundSchema = z.object({
+  error: z.string(),
+  reason: z.enum(["no_staff_mailbox_connected", "no_messages"]),
+});
+
 export const GoogleContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().optional(),
