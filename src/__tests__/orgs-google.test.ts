@@ -1093,3 +1093,57 @@ describe("GET /orgs/google/conversation", () => {
     expect(res.body.error).toContain("x-org-id");
   });
 });
+
+// ─── GET /internal/staff-mailboxes/conversation ───
+
+describe("GET /internal/staff-mailboxes/conversation", () => {
+  const PROSPECT = "prospect@acme.com";
+
+  it("requires the service API key", async () => {
+    const res = await request(app)
+      .get("/internal/staff-mailboxes/conversation")
+      .query({ email: PROSPECT })
+      .set({ ...idHeaders, "x-api-key": "wrong" });
+    expect(res.status).toBe(401);
+  });
+
+  it("404s with reason=no_staff_mailbox_connected when no staff mailbox is mirrored", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const res = await request(app)
+      .get("/internal/staff-mailboxes/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+    expect(res.status).toBe(404);
+    expect(res.body.reason).toBe("no_staff_mailbox_connected");
+  });
+
+  it("returns the staff exchange with the person", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: "00000000-0000-4000-a000-0000000000aa", org_id: "staff-org" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            gmail_message_id: "k1",
+            thread_id: "t1",
+            payload: { payload: { mimeType: "text/plain", body: { data: b64conv("Kevin taking over here.") } } },
+            fetched_at: new Date("2026-09-21T15:40:41Z"),
+            from_email: "kevin@distribute.you",
+            from_name: "Kevin",
+            to_emails: [PROSPECT],
+            subject: "Re: dinners",
+            snippet: "Kevin taking over",
+            sent_at: new Date("2026-09-21T15:40:41Z"),
+            labels: ["SENT"],
+          },
+        ],
+      });
+    const res = await request(app)
+      .get("/internal/staff-mailboxes/conversation")
+      .query({ email: PROSPECT })
+      .set(idHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body.messageCount).toBe(1);
+    expect(res.body.threads[0].messages[0].direction).toBe("outbound");
+    expect(res.body.threads[0].messages[0].bodyText).toBe("Kevin taking over here.");
+  });
+});

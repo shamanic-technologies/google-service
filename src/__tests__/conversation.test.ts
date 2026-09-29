@@ -15,7 +15,7 @@ vi.mock("../db/client", () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-import { getConversation } from "../services/conversation";
+import { getConversation, getStaffConversation } from "../services/conversation";
 
 const ORG = "00000000-0000-4000-a000-000000000001";
 const OTHER_ORG = "00000000-0000-4000-a000-0000000000ff";
@@ -243,5 +243,102 @@ describe("getConversation", () => {
     await getConversation(ORG, "  Prospect@ACME.com ");
 
     expect(mockQuery.mock.calls[1][1]).toEqual([ORG, PROSPECT]);
+  });
+});
+
+describe("getStaffConversation", () => {
+  const STAFF = "kevin@distribute.you";
+  const STAFF_ACCOUNT = "00000000-0000-4000-a000-0000000000aa";
+
+  // clearAllMocks keeps queued once-values; an unconsumed one from an earlier test must not leak.
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it("answers no_staff_mailbox_connected when no staff mailbox is mirrored", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    expect(await getStaffConversation(PROSPECT)).toEqual({
+      found: false,
+      reason: "no_staff_mailbox_connected",
+    });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads ONLY staff mailboxes, looked up by their staff address", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await getStaffConversation(PROSPECT);
+
+    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("lower(google_account_email) = ANY($1::text[])");
+    expect(params[0]).toEqual(["kevin.lourd@gmail.com", "kevin@distribute.you"]);
+  });
+
+  it("filters to messages BETWEEN staff and the person, in SQL, never the whole thread", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: STAFF_ACCOUNT, org_id: OTHER_ORG }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    expect(await getStaffConversation("  Prospect@Acme.com ")).toEqual({
+      found: false,
+      reason: "no_messages",
+    });
+
+    const [sql, params] = mockQuery.mock.calls[1] as [string, unknown[]];
+    expect(sql).toContain("s.google_account_id = ANY($2::uuid[])");
+    expect(sql).toContain(
+      "(lower(s.from_email) = ANY($3::text[]) AND (s.to_emails ? $4 OR s.cc_emails ? $4))"
+    );
+    expect(sql).toContain(
+      "(lower(s.from_email) = $4 AND (s.to_emails ?| $3::text[] OR s.cc_emails ?| $3::text[]))"
+    );
+    // No thread expansion: the thread id is never used as a filter.
+    expect(sql).not.toContain("thread_id = ANY");
+    expect(sql).not.toContain("payload::text ILIKE");
+    expect(params).toEqual([
+      [OTHER_ORG],
+      [STAFF_ACCOUNT],
+      ["kevin.lourd@gmail.com", "kevin@distribute.you"],
+      PROSPECT,
+      201,
+    ]);
+  });
+
+  it("labels staff messages outbound and the person's inbound, oldest first", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: STAFF_ACCOUNT, org_id: OTHER_ORG }] })
+      .mockResolvedValueOnce({
+        rows: [
+          rawRow({
+            gmail_message_id: "k2",
+            from_email: STAFF,
+            to_emails: [PROSPECT],
+            sent_at: new Date("2026-09-21T19:07:27Z"),
+            payload: { payload: { mimeType: "text/plain", body: { data: b64("(Ignore that last email)") } } },
+          }),
+          rawRow({
+            gmail_message_id: "p1",
+            from_email: PROSPECT,
+            to_emails: [STAFF],
+            sent_at: new Date("2026-09-21T16:00:00Z"),
+          }),
+          rawRow({
+            gmail_message_id: "k1",
+            from_email: "Kevin@Distribute.you",
+            to_emails: [PROSPECT],
+            sent_at: new Date("2026-09-21T15:40:41Z"),
+            payload: { payload: { mimeType: "text/plain", body: { data: b64("Hi Jamie, Kevin taking over here.") } } },
+          }),
+        ],
+      });
+
+    const res = await getStaffConversation(PROSPECT);
+    expect(res.found).toBe(true);
+    if (!res.found) return;
+    const msgs = res.conversation.threads[0].messages;
+    expect(msgs.map((m) => m.gmailMessageId)).toEqual(["k1", "p1", "k2"]);
+    expect(msgs.map((m) => m.direction)).toEqual(["outbound", "inbound", "outbound"]);
+    expect(msgs[0].bodyText).toBe("Hi Jamie, Kevin taking over here.");
+    expect(res.conversation.truncated).toBe(false);
   });
 });
