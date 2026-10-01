@@ -5,7 +5,8 @@ vi.mock("../db/client", () => ({
   query: vi.fn(async () => ({ rows: [], rowCount: 0 })),
 }));
 
-import { parseContactSilver, parseMessageSilver } from "../services/silver";
+import { parseContactSilver, parseMessageSilver, upsertMessageSilver } from "../services/silver";
+import { query } from "../db/client";
 import type { GmailMessage, PersonResource } from "../services/google-api";
 
 describe("parseContactSilver", () => {
@@ -147,5 +148,23 @@ describe("parseMessageSilver", () => {
     expect(s.to).toEqual([]);
     expect(s.subject).toBeNull();
     expect(s.labels).toEqual([]);
+  });
+});
+
+describe("upsertMessageSilver", () => {
+  it("leaves an unchanged row untouched (boot backfill must not rewrite silver)", async () => {
+    await upsertMessageSilver("o", "a", "r", "m1", "t1", {
+      fromEmail: "a@b.c",
+      fromName: null,
+      to: [],
+      cc: [],
+      subject: null,
+      snippet: null,
+      sentAt: null,
+      labels: [],
+      historyId: null,
+    } as unknown as Parameters<typeof upsertMessageSilver>[5]);
+    const sql = vi.mocked(query).mock.calls.at(-1)![0] as string;
+    expect(sql).toMatch(/ON CONFLICT \(org_id, gmail_message_id\) DO UPDATE SET[\s\S]*WHERE \([\s\S]*\)\s+IS DISTINCT FROM/);
   });
 });
