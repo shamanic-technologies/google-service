@@ -2,6 +2,7 @@ import { query } from "../db/client";
 import type { GmailMessage } from "./google-api";
 import { extractMessageBody, type BodyStatus } from "./message-body";
 import { STAFF_ADDRESSES } from "../lib/staff-mailboxes";
+import { resolveOwnerAddresses } from "./owner-addresses";
 
 // Read the whole exchange with one person out of the Gmail mirror.
 //
@@ -82,16 +83,14 @@ export const getConversation = async (
 ): Promise<ConversationResult> => {
   const address = addressRaw.trim().toLowerCase();
 
-  const accounts = await query(
-    `SELECT lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1`,
-    [orgId]
-  );
-  if (accounts.rows.length === 0) {
+  // "Ours" = the same owner definition the correspondents read uses (connected
+  // accounts + send-as aliases seen on SENT mail), so a reply sent from an alias
+  // is "outbound" here exactly as it is counted outbound there.
+  const owner = await resolveOwnerAddresses(orgId);
+  if (!owner.connected) {
     return { found: false, reason: "no_google_account_connected" };
   }
-  const ownEmails = new Set(
-    accounts.rows.map((r) => (r.email as string | null) ?? "").filter((e) => e.length > 0)
-  );
+  const ownEmails = new Set(owner.addresses);
 
   // Threads this person appears in, matched entirely from INDEXES: lower(from_email)
   // as sender, GIN over to_emails and cc_emails as recipient. Every message of a

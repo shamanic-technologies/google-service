@@ -942,6 +942,7 @@ describe("GET /orgs/google/conversation", () => {
   it("returns the exchange with a prospect, both directions, oldest first, with bodies", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({
         rows: [
@@ -992,6 +993,7 @@ describe("GET /orgs/google/conversation", () => {
   it("scopes the read to the caller's org", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
@@ -1006,6 +1008,7 @@ describe("GET /orgs/google/conversation", () => {
   it("404s with reason=no_messages when nobody has this exchange", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
@@ -1049,6 +1052,7 @@ describe("GET /orgs/google/conversation", () => {
   it("answers 200 status=unreadable (never an empty conversation) when bodies cannot be read", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({
         rows: [
