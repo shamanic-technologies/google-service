@@ -533,6 +533,8 @@ export const GoogleAuthCallbackResponseSchema = z.object({
   success: z.boolean(),
   googleAccountId: z.string().uuid(),
   googleAccountEmail: z.string(),
+  // Id of the sync job started for the org on connect; poll GET /orgs/google/sync/{jobId}.
+  syncJobId: z.string().uuid(),
 });
 
 export const GoogleSyncSummarySchema = z.object({
@@ -761,6 +763,16 @@ export const GoogleAccountSummarySchema = z.object({
 
 export const GoogleAccountsListResponseSchema = z.object({
   accounts: z.array(GoogleAccountSummarySchema),
+});
+
+export const GoogleAccountEmailParamSchema = z.object({
+  email: z.string().email(),
+});
+
+export const GoogleAccountDisconnectResponseSchema = z.object({
+  disconnected: z.literal(true),
+  email: z.string(),
+  grant: z.enum(["revoked", "already_revoked"]),
 });
 
 // ─── Error ───

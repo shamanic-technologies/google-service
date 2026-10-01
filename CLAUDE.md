@@ -68,7 +68,9 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/orgs/google/auth/start` | Build authorize URL (PKCE), persist pending state |
-| `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens. Browser callback is proxied by the dashboard server-side so identity headers are present. |
+| `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens, then START a sync job for the org (returns `syncJobId`): a self-serve connect mirrors with no staff step. Browser callback is proxied by the dashboard server-side so identity headers are present. |
+| `GET` | `/orgs/google/accounts` | The org's connected mailboxes + health (`active` / `gmail_unavailable`). |
+| `DELETE` | `/orgs/google/accounts/{email}` | Disconnect: revoke the grant at Google FIRST (failure → 5xx, connection kept, retryable; Google `invalid_token` → `grant: already_revoked`), then delete the token row; the mirror (raw + silver messages/contacts) goes by `ON DELETE CASCADE`. `google_contact_links` (org CRM state) is kept. 404 `reason=account_not_found`. |
 | `POST` | `/orgs/google/sync` | Start an async sync. Inserts a `google_sync_jobs` row, fires ingest in a detached promise, returns `202 {jobId, status:"running"}` immediately. Backfill on first run (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
 | `GET` | `/orgs/google/sync/{jobId}` | Poll job status. Returns `{jobId, status, summary, error, startedAt, finishedAt}`. Org-scoped: 404 if `jobId` belongs to another org. |
 | `GET` | `/orgs/google/messages` | Cursor-paginated Gmail messages: bronze payload + typed silver fields, ordered by silver `sent_at` desc (fallback `fetched_at`). Optional `?participant=<email>` filters to one contact's thread (From/To/Cc participant via `payload::text ILIKE`), ordered by the message's own email date (`internalDate`) newest-first. |
@@ -226,6 +228,8 @@ Silver (`google_contacts_silver` / `gmail_messages_silver`) exists (see Data lay
 3. Manual user edits must coexist with derived data (needs a `*_overrides` table winning over silver).
 
 ## OAuth flow
+
+Self-serve: any dashboard user connects/disconnects their own mailbox (owner rule 2026-10-01), reached through api-service `/v1/orgs/google/*`. Google only accepts a `redirectUri` registered on the OAuth client: as of 2026-10-01 `https://admin.distribute.you/services/crm/oauth/callback` and `https://dashboard.distribute.you/services/crm/oauth/callback` are (probed: an unregistered one redirects to `authError=redirect_uri_mismatch`); `app.distribute.you` is NOT.
 
 ```
 dashboard → POST /orgs/google/auth/start  → { url, state }

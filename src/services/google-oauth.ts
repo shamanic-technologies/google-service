@@ -133,6 +133,27 @@ export const refreshAccessToken = async (
   return (await res.json()) as RefreshTokenResponse;
 };
 
+const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
+
+export type RevokeOutcome = "revoked" | "already_revoked";
+
+// Revokes the grant at Google. Revoking the refresh token kills every access token
+// minted from it, so the app disappears from the user's Google "third-party access".
+// Google answers 400 invalid_token when the grant is already gone (the user removed
+// the app, or the token expired): the end state is the one we asked for, so that is
+// reported as already_revoked rather than an error. Anything else fails loud.
+export const revokeGoogleToken = async (token: string): Promise<RevokeOutcome> => {
+  const res = await fetch(GOOGLE_REVOKE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ token }).toString(),
+  });
+  if (res.ok) return "revoked";
+  const text = await res.text();
+  if (res.status === 400 && text.includes("invalid_token")) return "already_revoked";
+  throw new Error(`Google token revoke failed: ${res.status} ${text}`);
+};
+
 export const fetchGoogleUserEmail = async (accessToken: string): Promise<string> => {
   const res = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
