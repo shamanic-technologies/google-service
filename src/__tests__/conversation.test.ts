@@ -55,6 +55,7 @@ describe("getConversation", () => {
   it("returns no_messages when nobody has this exchange", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] }) // accounts
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] }); // silver participant match
 
     const res = await getConversation(ORG, PROSPECT);
@@ -65,6 +66,7 @@ describe("getConversation", () => {
   it("returns the whole thread, both directions, oldest first, with readable bodies", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({
         // Query returns newest-first; the service reverses to oldest-first.
@@ -112,6 +114,7 @@ describe("getConversation", () => {
   it("scopes every query to the caller's org", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({ rows: [rawRow({})] });
 
@@ -127,6 +130,7 @@ describe("getConversation", () => {
   it("marks the conversation unreadable when no message body can be read", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({
         rows: [
@@ -147,6 +151,7 @@ describe("getConversation", () => {
   it("distinguishes an EMPTY message from an unreadable one", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({
         rows: [
@@ -174,6 +179,7 @@ describe("getConversation", () => {
   it("matches a Cc-only correspondent from the index, never by scanning bronze payloads", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t7" }] })
       .mockResolvedValueOnce({ rows: [rawRow({ thread_id: "t7" })] });
 
@@ -181,18 +187,19 @@ describe("getConversation", () => {
     expect(res.found).toBe(true);
     if (!res.found) return;
     expect(res.conversation.threads[0].threadId).toBe("t7");
-    expect(mockQuery.mock.calls[1][0]).toContain("cc_emails ? $2");
+    expect(mockQuery.mock.calls[2][0]).toContain("cc_emails ? $2");
   });
 
   it("never scans the bronze payloads when nobody has the exchange", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] });
 
     const res = await getConversation(ORG, PROSPECT);
 
     expect(res).toEqual({ found: false, reason: "no_messages" });
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
     for (const call of mockQuery.mock.calls) {
       expect(call[0]).not.toContain("payload::text ILIKE");
     }
@@ -201,6 +208,7 @@ describe("getConversation", () => {
   it("keeps the most recent messages and flags truncation past the limit", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({
         rows: [
@@ -220,6 +228,7 @@ describe("getConversation", () => {
   it("groups several threads, oldest thread first", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }, { thread_id: "t2" }] })
       .mockResolvedValueOnce({
         rows: [
@@ -237,12 +246,41 @@ describe("getConversation", () => {
   it("lowercases the requested address before matching", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     await getConversation(ORG, "  Prospect@ACME.com ");
 
-    expect(mockQuery.mock.calls[1][1]).toEqual([ORG, PROSPECT]);
+    expect(mockQuery.mock.calls[2][1]).toEqual([ORG, PROSPECT]);
+  });
+  it("labels a reply sent from a send-as alias (a SENT sender) outbound, like the correspondents read", async () => {
+    const ALIAS = "kevin@distribute.you";
+    mockQuery.mockReset(); // an earlier test's unconsumed once-value must not leak in
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] }) // connected account
+      .mockResolvedValueOnce({ rows: [{ email: ALIAS }] }) // send-as alias seen on SENT mail
+      .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          rawRow({ gmail_message_id: "m3", from_email: "someone@else.com", sent_at: new Date("2026-01-03T00:00:00Z") }),
+          rawRow({ gmail_message_id: "m2", from_email: "Kevin@Distribute.you", sent_at: new Date("2026-01-02T00:00:00Z") }),
+          rawRow({ gmail_message_id: "m1", from_email: PROSPECT, to_emails: [ALIAS], labels: ["INBOX"], sent_at: new Date("2026-01-01T00:00:00Z") }),
+        ],
+      });
+
+    const res = await getConversation(ORG, PROSPECT);
+    expect(res.found).toBe(true);
+    if (!res.found) return;
+
+    expect(res.conversation.threads[0].messages.map((m) => [m.gmailMessageId, m.direction])).toEqual([
+      ["m1", "inbound"],
+      ["m2", "outbound"],
+      ["m3", "other"],
+    ]);
+    // The alias came from the SENT-labelled read of this org's silver.
+    expect(mockQuery.mock.calls[1][0]).toContain("labels ? 'SENT'");
+    expect(mockQuery.mock.calls[1][1]).toEqual([ORG]);
   });
 });
 
