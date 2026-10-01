@@ -327,6 +327,9 @@ const spec = {
       GoogleContactsResponse: toSchema(schemas.GoogleContactsResponseSchema),
     GoogleConversationResponse: toSchema(schemas.GoogleConversationResponseSchema),
     GoogleConversationNotFound: toSchema(schemas.GoogleConversationNotFoundSchema),
+    GoogleCorrespondent: toSchema(schemas.GoogleCorrespondentSchema),
+    GoogleCorrespondentsResponse: toSchema(schemas.GoogleCorrespondentsResponseSchema),
+    GoogleCorrespondentsNotConnected: toSchema(schemas.GoogleCorrespondentsNotConnectedSchema),
 GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoundSchema),
       GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
@@ -1081,6 +1084,33 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
                 schema: { $ref: "#/components/schemas/GoogleConversationNotFound" },
               },
             },
+          },
+        },
+      },
+    },
+    "/orgs/google/correspondents": {
+      get: {
+        summary: "List who the org's connected mailbox has been in conversation with",
+        description:
+          "Every counterpart address the connected Gmail mailbox(es) have exchanged mail with, read out of the mirror (never calls Google). \"In conversation\" means the mailbox owner WROTE to them: the address appears in To or Cc of a message sent from an owner address. Pure inbound senders the owner never wrote to (newsletters, notifications) are excluded. Owner addresses (returned as ownerAddresses) = the org's connected Google account emails plus every sender of a SENT-labelled message (send-as aliases). Per address: outboundMessages = messages sent from an owner address with this address in To/Cc (counted once per message); inboundMessages = messages whose From is this address; first/last activity over those messages. Every listed address matches GET /orgs/google/conversation?email=<address> (same lower-cased From/To/Cc matching), so it opens to a non-empty conversation there. Sorted by lastMessageAt desc, then email asc (total order, stable across pages). total is the full count across all pages; twoWayTotal counts those with at least one inbound message. 404 reason=no_google_account_connected means no mailbox is connected; a connected mailbox with nobody answers 200 with total=0.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 1000 }, description: "Page size (default 500)." },
+          { name: "offset", in: "query", required: false, schema: { type: "integer", minimum: 0 }, description: "Rows to skip (default 0)." },
+        ],
+        responses: {
+          "200": {
+            description: "The correspondents page, with totals across all pages",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleCorrespondentsResponse" } } },
+          },
+          "404": {
+            description: "No Google account is connected for this org",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleCorrespondentsNotConnected" } } },
           },
         },
       },

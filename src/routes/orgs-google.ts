@@ -10,6 +10,7 @@ import {
   GoogleMessagesQuerySchema,
   GoogleContactsQuerySchema,
   GoogleConversationQuerySchema,
+  GoogleCorrespondentsQuerySchema,
   GoogleContactLinkPutBodySchema,
   GoogleSyncJobIdParamSchema,
 } from "../schemas";
@@ -25,6 +26,7 @@ import {
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
 import { getConversation } from "../services/conversation";
+import { listCorrespondents } from "../services/correspondents";
 
 const router = Router();
 
@@ -583,6 +585,39 @@ router.get(
       }
 
       res.json(result.conversation);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── GET /orgs/google/correspondents ───
+//
+// Discovery half of the conversation read: every address the connected
+// mailbox has been IN CONVERSATION with (the owner wrote to them), with counts
+// each way and first/last activity. Pure read of silver, never calls Google.
+//   404 reason=no_google_account_connected — this org has connected no mailbox
+//   200 total=0                            — connected, nobody
+router.get(
+  "/correspondents",
+  validateQuery(GoogleCorrespondentsQuerySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const q = req.validatedQuery as { limit?: number; offset?: number };
+
+      const result = await listCorrespondents(orgId, q);
+
+      if (!result.connected) {
+        res.locals.documentedAnswer = true;
+        res.status(404).json({
+          error: "No Google account is connected for this org",
+          reason: result.reason,
+        });
+        return;
+      }
+
+      res.json(result.page);
     } catch (err) {
       next(err);
     }
