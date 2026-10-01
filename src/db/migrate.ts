@@ -217,6 +217,18 @@ CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_cc_emails
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_org_thread
   ON gmail_messages_raw(org_id, thread_id);
 
+-- Correspondents read (GET /orgs/google/correspondents).
+-- 1. Send-as aliases = senders of SENT-labelled mail; partial, so tiny.
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_sent_from
+  ON gmail_messages_silver(org_id, lower(from_email)) WHERE labels ? 'SENT';
+-- 2. Inbound counts + first/last per correspondent INDEX-ONLY (from_email is
+--    INCLUDEd because the planner needs the base column for an index-only scan
+--    on an expression key), and newest-first lookup of the name they sign with.
+--    from_name is deliberately NOT included: a btree tuple caps at ~2.7kB and a
+--    pathological display name would fail ingest.
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_from_sent
+  ON gmail_messages_silver(org_id, lower(from_email), sent_at DESC NULLS LAST) INCLUDE (from_email);
+
 -- ─── Per-contact CRM links (org/brand/feature tagging + reserved status) ───
 -- One row per (org, Google contact resourceName). LEFT-JOINed onto
 -- GET /orgs/google/contacts; upserted via PUT /orgs/google/contact-links.
