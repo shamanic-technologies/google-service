@@ -221,13 +221,16 @@ CREATE INDEX IF NOT EXISTS idx_gmail_messages_raw_org_thread
 -- 1. Send-as aliases = senders of SENT-labelled mail; partial, so tiny.
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_sent_from
   ON gmail_messages_silver(org_id, lower(from_email)) WHERE labels ? 'SENT';
--- 2. Inbound counts + first/last per correspondent INDEX-ONLY (from_email is
---    INCLUDEd because the planner needs the base column for an index-only scan
---    on an expression key), and newest-first lookup of the name they sign with.
---    from_name is deliberately NOT included: a btree tuple caps at ~2.7kB and a
---    pathological display name would fail ingest.
-CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_from_sent
-  ON gmail_messages_silver(org_id, lower(from_email), sent_at DESC NULLS LAST) INCLUDE (from_email);
+-- 2. Inbound counts + first/last per correspondent INDEX-ONLY, and newest-first
+--    lookup of the name they sign with. Keyed on the PLAIN from_email column:
+--    silver lower-cases it at ingest (parseAddress), and Postgres never plans an
+--    index-only scan over an expression key (measured: the lower(from_email)
+--    variant was ignored, 166k heap fetches, 1.6s warm / 9s cold). from_name is
+--    deliberately NOT included: a btree tuple caps at ~2.7kB and a pathological
+--    display name would fail ingest.
+DROP INDEX IF EXISTS idx_gmail_messages_silver_from_sent;
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_silver_from_plain_sent
+  ON gmail_messages_silver(org_id, from_email, sent_at DESC NULLS LAST);
 
 -- ─── Per-contact CRM links (org/brand/feature tagging + reserved status) ───
 -- One row per (org, Google contact resourceName). LEFT-JOINed onto

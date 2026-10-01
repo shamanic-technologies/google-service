@@ -84,10 +84,13 @@ export const listCorrespondents = async (
 
   // One statement. Outbound = messages FROM an owner address, exploded on their
   // To + Cc (each recipient counted once per message). Inbound = every message
-  // FROM that recipient, counted INDEX-ONLY on idx_gmail_messages_silver_from_sent
+  // FROM that recipient, counted INDEX-ONLY on idx_gmail_messages_silver_from_plain_sent
   // for the few hundred recipients only — never a scan of the inbound noise. (A
   // recipient can be a busy address: 166k inbound rows across the first org's 453
   // recipients, which took 12s cold through heap fetches before that index.)
+  // Inbound matches the PLAIN from_email: silver lower-cases it at ingest, so it
+  // equals lower(from_email) (the conversation read's match) and the index stays
+  // index-only-scannable.
   const rows = await query(
     `WITH outm AS (
         SELECT r.addr, s.sent_at
@@ -106,13 +109,13 @@ export const listCorrespondents = async (
           FROM outm GROUP BY addr
       ),
       inagg AS (
-        SELECT lower(s.from_email) AS addr,
+        SELECT s.from_email AS addr,
                count(*)::int AS n,
                min(s.sent_at) AS first_at,
                max(s.sent_at) AS last_at
           FROM gmail_messages_silver s
          WHERE s.org_id = $1
-           AND lower(s.from_email) = ANY(ARRAY(SELECT addr FROM outagg))
+           AND s.from_email = ANY(ARRAY(SELECT addr FROM outagg))
          GROUP BY 1
       ),
       joined AS (
@@ -132,10 +135,10 @@ export const listCorrespondents = async (
              (count(*) FILTER (WHERE j.in_n > 0) OVER ())::int AS two_way_total
         FROM joined j
         -- The name they sign with on their most recent message that carries one
-        -- (walks idx_gmail_messages_silver_from_sent newest-first, usually 1 row).
+        -- (walks idx_gmail_messages_silver_from_plain_sent newest-first, usually 1 row).
         LEFT JOIN LATERAL (
           SELECT btrim(s.from_name) AS from_name FROM gmail_messages_silver s
-           WHERE s.org_id = $1 AND lower(s.from_email) = j.addr
+           WHERE s.org_id = $1 AND s.from_email = j.addr
              AND s.from_name IS NOT NULL AND btrim(s.from_name) <> ''
            ORDER BY s.sent_at DESC NULLS LAST
            LIMIT 1
@@ -202,7 +205,7 @@ const countCorrespondents = async (
       SELECT count(*)::int AS total,
              count(*) FILTER (WHERE EXISTS (
                SELECT 1 FROM gmail_messages_silver s
-                WHERE s.org_id = $1 AND lower(s.from_email) = rec.addr
+                WHERE s.org_id = $1 AND s.from_email = rec.addr
              ))::int AS two_way_total
         FROM rec
        WHERE addr <> '' AND NOT (addr = ANY($2::text[]))`,
