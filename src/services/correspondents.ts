@@ -135,12 +135,19 @@ export const listCorrespondents = async (
              (count(*) FILTER (WHERE j.in_n > 0) OVER ())::int AS two_way_total
         FROM joined j
         -- The name they sign with on their most recent message that carries one
-        -- (walks idx_gmail_messages_silver_from_plain_sent newest-first, usually 1 row).
+        -- (walks idx_gmail_messages_silver_from_plain_sent newest-first).
+        -- Bounded to their 20 most recent messages: a busy sender that never
+        -- signs (a notification address) would otherwise walk all its rows.
         LEFT JOIN LATERAL (
-          SELECT btrim(s.from_name) AS from_name FROM gmail_messages_silver s
-           WHERE s.org_id = $1 AND s.from_email = j.addr
-             AND s.from_name IS NOT NULL AND btrim(s.from_name) <> ''
-           ORDER BY s.sent_at DESC NULLS LAST
+          SELECT btrim(t.from_name) AS from_name
+            FROM (
+              SELECT s.from_name, s.sent_at FROM gmail_messages_silver s
+               WHERE s.org_id = $1 AND s.from_email = j.addr
+               ORDER BY s.sent_at DESC NULLS LAST
+               LIMIT 20
+            ) t
+           WHERE t.from_name IS NOT NULL AND btrim(t.from_name) <> ''
+           ORDER BY t.sent_at DESC NULLS LAST
            LIMIT 1
         ) nm ON j.in_n > 0
         LEFT JOIN LATERAL (

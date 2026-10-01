@@ -242,7 +242,23 @@ export const upsertMessageSilver = async (
         labels = EXCLUDED.labels,
         history_id = EXCLUDED.history_id,
         source_row_id = EXCLUDED.source_row_id,
-        last_rebuilt_at = NOW()`,
+        last_rebuilt_at = NOW()
+     -- No-churn guard: the boot backfill re-upserts EVERY bronze row, so without
+     -- it each deploy rewrote all ~713k silver rows (2.16M updates measured),
+     -- which bloats the table and clears the visibility map, turning every
+     -- index-only scan (the correspondents read) into heap fetches. An
+     -- unchanged row is now left untouched; last_rebuilt_at = last real change.
+     WHERE (gmail_messages_silver.google_account_id, gmail_messages_silver.thread_id,
+            gmail_messages_silver.from_email, gmail_messages_silver.from_name,
+            gmail_messages_silver.to_emails, gmail_messages_silver.cc_emails,
+            gmail_messages_silver.subject, gmail_messages_silver.snippet,
+            gmail_messages_silver.sent_at, gmail_messages_silver.labels,
+            gmail_messages_silver.history_id, gmail_messages_silver.source_row_id)
+       IS DISTINCT FROM
+           (EXCLUDED.google_account_id, EXCLUDED.thread_id, EXCLUDED.from_email,
+            EXCLUDED.from_name, EXCLUDED.to_emails, EXCLUDED.cc_emails, EXCLUDED.subject,
+            EXCLUDED.snippet, EXCLUDED.sent_at, EXCLUDED.labels, EXCLUDED.history_id,
+            EXCLUDED.source_row_id)`,
     [
       orgId,
       googleAccountId,
