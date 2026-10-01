@@ -159,6 +159,19 @@ describe("listCorrespondents", () => {
     }
   });
 
+  it("counts inbound on the PLAIN from_email so the counting index stays index-only", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [row({})] });
+
+    await listCorrespondents(ORG);
+
+    const sql = mockQuery.mock.calls[2][0] as string;
+    expect(sql).toContain("s.from_email = ANY(ARRAY(SELECT addr FROM outagg))");
+    expect(sql).not.toContain("lower(s.from_email) = ANY(ARRAY(");
+  });
+
   it("orders on a total order so pages never overlap or skip", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
