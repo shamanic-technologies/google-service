@@ -335,6 +335,7 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
       GoogleAccountsListResponse: toSchema(schemas.GoogleAccountsListResponseSchema),
+      GoogleAccountDisconnectResponse: toSchema(schemas.GoogleAccountDisconnectResponseSchema),
       ErrorResponse: toSchema(schemas.ErrorResponseSchema),
     },
     parameters: {
@@ -890,6 +891,46 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
         },
       },
     },
+    "/orgs/google/accounts/{email}": {
+      delete: {
+        summary: "Disconnect one connected Google account",
+        description:
+          "Revokes the grant at Google (refresh token), then deletes the account and everything mirrored for it (Gmail messages + contacts, bronze and silver). A Google revoke failure answers 5xx and leaves the connection intact so the call can be retried. An already-revoked grant (the user removed the app at Google) is reported as grant=already_revoked. Contact links (CRM tagging) are org state and are kept.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          {
+            name: "email",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "email" },
+            description: "The connected Google account email (URL-encoded). Matched case-insensitively.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Disconnected",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GoogleAccountDisconnectResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "This org has no connected account with that email (reason=account_not_found)",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
     "/orgs/google/auth/start": {
       post: {
         summary: "Start Google CRM OAuth (Gmail + People readonly)",
@@ -927,7 +968,7 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       get: {
         summary: "Google CRM OAuth callback (Gmail + People readonly)",
         description:
-          "Exchanges code+PKCE for tokens, stores refresh token in google_oauth_tokens (one row per (org_id, google_account_email)).",
+          "Exchanges code+PKCE for tokens, stores refresh token in google_oauth_tokens (one row per (org_id, google_account_email)), then starts an async sync of the org's mailboxes so the new one mirrors with no further step. The response carries syncJobId; poll GET /orgs/google/sync/{jobId}.",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },

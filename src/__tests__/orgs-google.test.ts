@@ -13,7 +13,9 @@ const {
   mockIngestOtherPeople,
   mockCreateRun,
   mockUpdateRun,
+  mockRevokeGoogleToken,
 } = vi.hoisted(() => ({
+  mockRevokeGoogleToken: vi.fn(),
   mockQuery: vi.fn(),
   mockGetGoogleOAuthClient: vi.fn(),
   mockExchangeCodeForTokens: vi.fn(),
@@ -66,6 +68,7 @@ vi.mock("../services/google-oauth", async () => {
     ...actual,
     exchangeCodeForTokens: (...args: unknown[]) => mockExchangeCodeForTokens(...args),
     fetchGoogleUserEmail: (...args: unknown[]) => mockFetchGoogleUserEmail(...args),
+    revokeGoogleToken: (...args: unknown[]) => mockRevokeGoogleToken(...args),
   };
 });
 
@@ -207,6 +210,8 @@ describe("POST /orgs/google/auth/start", () => {
 
 // ─── AC3 / AC11: auth/callback ───
 
+const TEST_JOB_ID_CB = "00000000-0000-4000-a000-0000000000cb";
+
 describe("GET /orgs/google/auth/callback", () => {
   it("rejects invalid state with 400", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -218,19 +223,24 @@ describe("GET /orgs/google/auth/callback", () => {
     expect(res.body.error).toContain("Invalid or expired");
   });
 
-  it("exchanges code, stores token, returns 200", async () => {
-    mockQuery
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            pkce_verifier: "verifier-x",
-            redirect_uri: "http://localhost:8080/orgs/google/auth/callback",
-            feature_slug: null,
-            brand_id: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ rows: [] });
+  it("exchanges code, stores token, starts a sync job, returns 200", async () => {
+    mockListOrgGoogleAccounts.mockResolvedValue([]);
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM google_oauth_pending") && sql.includes("SELECT")) {
+        return {
+          rows: [
+            {
+              pkce_verifier: "verifier-x",
+              redirect_uri: "http://localhost:8080/orgs/google/auth/callback",
+              feature_slug: null,
+              brand_id: null,
+            },
+          ],
+        };
+      }
+      if (sql.includes("INSERT INTO google_sync_jobs")) return { rows: [{ id: TEST_JOB_ID_CB }] };
+      return { rows: [] };
+    });
 
     mockExchangeCodeForTokens.mockResolvedValueOnce({
       access_token: "at",
@@ -252,6 +262,11 @@ describe("GET /orgs/google/auth/callback", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.googleAccountId).toBe(TEST_ACCOUNT_UUID);
     expect(res.body.googleAccountEmail).toBe("alice@example.com");
+    expect(res.body.syncJobId).toBe(TEST_JOB_ID_CB);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO google_sync_jobs"),
+      [TEST_ORG_ID, TEST_USER_ID]
+    );
 
     expect(mockExchangeCodeForTokens).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1149,5 +1164,88 @@ describe("GET /internal/staff-mailboxes/conversation", () => {
     expect(res.body.messageCount).toBe(1);
     expect(res.body.threads[0].messages[0].direction).toBe("outbound");
     expect(res.body.threads[0].messages[0].bodyText).toBe("Kevin taking over here.");
+  });
+});
+
+// ─── DELETE /orgs/google/accounts/:email ───
+
+describe("DELETE /orgs/google/accounts/:email", () => {
+  const tokenRow = {
+    id: TEST_ACCOUNT_UUID,
+    google_account_email: "alice@example.com",
+    refresh_token: "rt-alice",
+  };
+
+  it("revokes the grant at Google, deletes the account (mirror cascades), returns 200", async () => {
+    mockQuery.mockImplementation(async (sql: string) =>
+      sql.includes("SELECT") ? { rows: [tokenRow] } : { rows: [] }
+    );
+    mockRevokeGoogleToken.mockResolvedValueOnce("revoked");
+
+    const res = await request(app)
+      .delete(`/orgs/google/accounts/${encodeURIComponent("Alice@Example.com")}`)
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ disconnected: true, email: "alice@example.com", grant: "revoked" });
+    expect(mockRevokeGoogleToken).toHaveBeenCalledWith("rt-alice");
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("lower(google_account_email) = lower($2)"),
+      [TEST_ORG_ID, "Alice@Example.com"]
+    );
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM google_oauth_tokens WHERE org_id = $1 AND id = $2"),
+      [TEST_ORG_ID, TEST_ACCOUNT_UUID]
+    );
+  });
+
+  it("reports an already-revoked grant and still disconnects", async () => {
+    mockQuery.mockImplementation(async (sql: string) =>
+      sql.includes("SELECT") ? { rows: [tokenRow] } : { rows: [] }
+    );
+    mockRevokeGoogleToken.mockResolvedValueOnce("already_revoked");
+
+    const res = await request(app)
+      .delete("/orgs/google/accounts/alice%40example.com")
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    expect(res.body.grant).toBe("already_revoked");
+  });
+
+  it("404s with reason=account_not_found when the org has no such mailbox, touching nothing", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .delete("/orgs/google/accounts/nobody%40example.com")
+      .set(idHeaders);
+
+    expect(res.status).toBe(404);
+    expect(res.body.reason).toBe("account_not_found");
+    expect(mockRevokeGoogleToken).not.toHaveBeenCalled();
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the connection when Google refuses the revoke (fail loud, retryable)", async () => {
+    mockQuery.mockImplementation(async (sql: string) =>
+      sql.includes("SELECT") ? { rows: [tokenRow] } : { rows: [] }
+    );
+    mockRevokeGoogleToken.mockRejectedValueOnce(new Error("Google token revoke failed: 503 down"));
+
+    const res = await request(app)
+      .delete("/orgs/google/accounts/alice%40example.com")
+      .set(idHeaders);
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(mockQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM google_oauth_tokens"),
+      expect.anything()
+    );
+  });
+
+  it("rejects a non-email path segment with 400", async () => {
+    const res = await request(app).delete("/orgs/google/accounts/not-an-email").set(idHeaders);
+    expect(res.status).toBe(400);
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });

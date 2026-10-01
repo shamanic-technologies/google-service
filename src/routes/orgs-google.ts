@@ -13,6 +13,7 @@ import {
   GoogleCorrespondentsQuerySchema,
   GoogleContactLinkPutBodySchema,
   GoogleSyncJobIdParamSchema,
+  GoogleAccountEmailParamSchema,
 } from "../schemas";
 import { getGoogleOAuthClient, type CallerContext } from "../services/key-service";
 import {
@@ -22,6 +23,7 @@ import {
   generatePkcePair,
   generateState,
   GOOGLE_CRM_SCOPES,
+  revokeGoogleToken,
 } from "../services/google-oauth";
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
@@ -146,6 +148,18 @@ router.get(
         brandId: pending.brand_id ?? undefined,
       });
 
+      // The mailbox starts mirroring the moment it is connected: no staff step, no
+      // wait for the 6-hourly cron. Same async job as POST /sync, so the caller can
+      // poll GET /sync/:jobId with the returned syncJobId.
+      const syncJobId = await startSyncJob({
+        orgId,
+        userId,
+        callerCtx: callerCtx(req),
+        runId: req.runId!,
+        featureSlug: req.featureSlug,
+        brandId: req.brandId,
+      });
+
       traceEvent(
         req.runId!,
         { service: "google-service", event: "google-crm-auth-callback-done", detail: `email=${email}` },
@@ -156,6 +170,7 @@ router.get(
         success: true,
         googleAccountId: stored.id,
         googleAccountEmail: stored.googleAccountEmail,
+        syncJobId,
       });
     } catch (err) {
       next(err);
@@ -199,6 +214,68 @@ router.get(
   }
 );
 
+// ─── DELETE /orgs/google/accounts/:email ───
+//
+// Disconnects one mailbox: revokes the grant at Google first (so a failure leaves
+// the connection intact and retryable, never a deleted row with a live grant),
+// then deletes the token row. Every mirrored row (gmail_messages_raw/silver,
+// google_contacts_raw/silver) references it ON DELETE CASCADE, so the mirror goes
+// with it. google_contact_links is per-org CRM tagging, not mirror, and stays.
+router.delete(
+  "/accounts/:email",
+  validateParams(GoogleAccountEmailParamSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.orgId!;
+      const { email } = req.validatedParams as { email: string };
+
+      const found = await query(
+        `SELECT id, google_account_email, refresh_token
+           FROM google_oauth_tokens
+           WHERE org_id = $1 AND lower(google_account_email) = lower($2)`,
+        [orgId, email]
+      );
+      if (found.rows.length === 0) {
+        res.status(404).json({
+          error: `No connected Google account ${email} for this org`,
+          reason: "account_not_found",
+        });
+        return;
+      }
+      const row = found.rows[0] as {
+        id: string;
+        google_account_email: string;
+        refresh_token: string;
+      };
+
+      const revoke = await revokeGoogleToken(row.refresh_token);
+
+      await query(`DELETE FROM google_oauth_tokens WHERE org_id = $1 AND id = $2`, [
+        orgId,
+        row.id,
+      ]);
+
+      traceEvent(
+        req.runId!,
+        {
+          service: "google-service",
+          event: "google-crm-account-disconnected",
+          detail: `email=${row.google_account_email} grant=${revoke}`,
+        },
+        req.headers
+      ).catch(() => {});
+
+      res.json({
+        disconnected: true,
+        email: row.google_account_email,
+        grant: revoke,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // ─── POST /orgs/google/sync (async) ───
 //
 // Inserts a row in google_sync_jobs (status='running'), fires the actual ingest
@@ -210,20 +287,9 @@ router.post(
   "/sync",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const orgId = req.orgId!;
-      const userId = req.userId!;
-
-      const insertResult = await query(
-        `INSERT INTO google_sync_jobs (org_id, user_id, status)
-         VALUES ($1, $2, 'running')
-         RETURNING id`,
-        [orgId, userId]
-      );
-      const jobId = insertResult.rows[0].id as string;
-
-      runSyncInBackground({
-        jobId,
-        orgId,
+      const jobId = await startSyncJob({
+        orgId: req.orgId!,
+        userId: req.userId!,
         callerCtx: callerCtx(req),
         runId: req.runId!,
         featureSlug: req.featureSlug,
@@ -245,6 +311,21 @@ interface RunSyncArgs {
   featureSlug?: string;
   brandId?: string;
 }
+
+const startSyncJob = async (
+  args: Omit<RunSyncArgs, "jobId"> & { userId: string }
+): Promise<string> => {
+  const { userId, ...rest } = args;
+  const insertResult = await query(
+    `INSERT INTO google_sync_jobs (org_id, user_id, status)
+     VALUES ($1, $2, 'running')
+     RETURNING id`,
+    [rest.orgId, userId]
+  );
+  const jobId = insertResult.rows[0].id as string;
+  runSyncInBackground({ jobId, ...rest });
+  return jobId;
+};
 
 const runSyncInBackground = (args: RunSyncArgs): void => {
   void runSync(args).catch((err) => {
