@@ -1,4 +1,5 @@
 import { query } from "../db/client";
+import { resolveOwnerAddresses } from "./owner-addresses";
 
 // Who has this org's connected mailbox been IN CONVERSATION with?
 //
@@ -11,11 +12,8 @@ import { query } from "../db/client";
 // (newsletters, notifications: 215k distinct senders on the first org, vs a few
 // hundred people the owner wrote to) is excluded by construction.
 //
-// Owner addresses = every connected Google account email of the org, plus every
-// sender of a message Gmail labelled SENT in this org's mirror (send-as aliases
-// such as a work address relayed through the personal mailbox). Gmail puts SENT
-// only on mail that left this mailbox, so it is the mailbox's own statement of
-// which addresses are its own.
+// Owner addresses: `resolveOwnerAddresses` (connected accounts + SENT senders),
+// the same definition the conversation read labels "outbound" with.
 //
 // Reconciliation with GET /orgs/google/conversation: that read matches an address
 // on lower(from_email), to_emails and cc_emails. Every address listed here was
@@ -59,28 +57,11 @@ export const listCorrespondents = async (
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const offset = opts.offset ?? 0;
 
-  const accounts = await query(
-    `SELECT lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1`,
-    [orgId]
-  );
-  if (accounts.rows.length === 0) {
+  const owner = await resolveOwnerAddresses(orgId);
+  if (!owner.connected) {
     return { connected: false, reason: "no_google_account_connected" };
   }
-
-  // Send-as aliases, read off the partial index on SENT-labelled messages.
-  const aliases = await query(
-    `SELECT DISTINCT lower(from_email) AS email
-       FROM gmail_messages_silver
-      WHERE org_id = $1 AND labels ? 'SENT' AND from_email IS NOT NULL AND from_email <> ''`,
-    [orgId]
-  );
-
-  const owner = new Set<string>();
-  for (const r of [...accounts.rows, ...aliases.rows]) {
-    const e = ((r.email as string | null) ?? "").trim();
-    if (e.length > 0) owner.add(e);
-  }
-  const ownerAddresses = [...owner].sort();
+  const ownerAddresses = owner.addresses;
 
   // One statement. Outbound = messages FROM an owner address, exploded on their
   // To + Cc (each recipient counted once per message). Inbound = every message
