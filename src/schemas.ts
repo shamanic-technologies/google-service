@@ -658,6 +658,43 @@ export const GoogleStaffConversationNotFoundSchema = z.object({
   reason: z.enum(["no_staff_mailbox_connected", "no_messages"]),
 });
 
+// ─── Correspondents read (GET /orgs/google/correspondents) ───
+// Who the connected mailbox has been IN CONVERSATION with: every address the
+// owner wrote to (To/Cc of a message sent from an owner address), with counts
+// each way and first/last activity. Pure inbound senders are excluded.
+
+export const GoogleCorrespondentsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+export const GoogleCorrespondentSchema = z.object({
+  email: z.string(),
+  name: z.string().nullable(),
+  nameSource: z.enum(["message", "contact"]).nullable(),
+  outboundMessages: z.number().int(),
+  inboundMessages: z.number().int(),
+  twoWay: z.boolean(),
+  firstMessageAt: z.string().nullable(),
+  lastMessageAt: z.string().nullable(),
+  lastOutboundAt: z.string().nullable(),
+  lastInboundAt: z.string().nullable(),
+});
+
+export const GoogleCorrespondentsResponseSchema = z.object({
+  ownerAddresses: z.array(z.string()),
+  total: z.number().int(),
+  twoWayTotal: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+  correspondents: z.array(GoogleCorrespondentSchema),
+});
+
+export const GoogleCorrespondentsNotConnectedSchema = z.object({
+  error: z.string(),
+  reason: z.literal("no_google_account_connected"),
+});
+
 export const GoogleContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().optional(),

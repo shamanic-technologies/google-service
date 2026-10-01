@@ -74,6 +74,7 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `GET` | `/orgs/google/messages` | Cursor-paginated Gmail messages: bronze payload + typed silver fields, ordered by silver `sent_at` desc (fallback `fetched_at`). Optional `?participant=<email>` filters to one contact's thread (From/To/Cc participant via `payload::text ILIKE`), ordered by the message's own email date (`internalDate`) newest-first. |
 | `GET` | `/orgs/google/contacts` | Cursor-paginated Google contacts: bronze payload + typed silver fields, deduped by `primary_email` (text `query` matches `payload::text ILIKE`). Each item also carries `links{orgIds,brandIds,featureSlugs,status}` from `google_contact_links` (LEFT JOIN, unconditional). |
 | `GET` | `/orgs/google/conversation` | The whole exchange with ONE person, read out of the mirror: `?email=<address>` (required), optional `limit` (default 200, max 500). Both directions, grouped by thread, oldest first, with readable bodies. Never calls Google. See "Per-person conversation read" below. |
+| `GET` | `/orgs/google/correspondents` | Who the connected mailbox has been IN CONVERSATION with (the owner wrote to them), counts each way + first/last activity, `limit`/`offset` + `total`. Never calls Google. See "Correspondents read" below. |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Per-person conversation read (`GET /orgs/google/conversation`)
@@ -86,6 +87,15 @@ The mirror holds exchanges the outreach provider never saw — a forwarding rule
 - **Three facts, three answers — do NOT collapse them.** `404 reason=no_google_account_connected` (this org connected no mailbox), `404 reason=no_messages` (nobody has this exchange), and `200` with `status: ok | partial | unreadable` (we hold it; some or none of it could be read). Per message, `bodyStatus` is `ok` / `empty` (it exists and genuinely says nothing) / `unavailable` (we hold it and could not read it — the text sits behind a Gmail `attachmentId`, which we do NOT fetch). Returning an empty conversation for an unreadable one would tell a customer the prospect said nothing.
 - **Ordering + truncation.** Threads oldest-first by their first message, messages oldest-first inside each. Past `limit` the MOST RECENT messages are kept and `truncated: true` is returned — an exchange is never silently cut at its head without saying so.
 - `direction` is `inbound` (from the prospect), `outbound` (from one of the org's connected Google accounts) or `other`.
+
+### Correspondents read (`GET /orgs/google/correspondents`) — discovery for the per-person read
+
+`src/services/correspondents.ts`. Lists the addresses worth opening with `/conversation`. Consumer: crm-service's merged person layer ("Gmail: N people").
+- **"In conversation" = the owner WROTE to them** (To/Cc of a message whose From is an owner address). On the first org: 215k distinct inbound senders vs ~450 people written to. Never widen this to inbound senders.
+- **Owner addresses** = connected account emails + every sender of a `SENT`-labelled message (send-as aliases, e.g. `kevin@distribute.you` relayed through `kevin.lourd@gmail.com`). Returned as `ownerAddresses`. Note `/conversation` still labels `direction` from account emails only.
+- **Reconciles with `/conversation`**: same lower-cased silver From/To/Cc match, so every listed address opens non-empty there. `outboundMessages` = owner messages with them in To/Cc (once per message), `inboundMessages` = messages From them.
+- **Speed is index-carried**: `idx_gmail_messages_silver_sent_from` (partial, SENT) for aliases; `idx_gmail_messages_silver_from_sent` (`org, lower(from_email), sent_at DESC NULLS LAST` INCLUDE `from_email`) makes inbound counts index-only. Without it the 453 recipients' 166k inbound rows took 12s cold through heap fetches. Do NOT INCLUDE `from_name` (btree tuple cap ~2.7kB would fail ingest on a pathological name).
+- 404 `no_google_account_connected` vs 200 `total: 0` stay distinct. Order `lastMessageAt DESC NULLS LAST, email ASC` (total order).
 
 ### Staff exchange read (`GET /internal/staff-mailboxes/conversation`) — the ONE cross-org read
 
