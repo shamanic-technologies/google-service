@@ -10,6 +10,10 @@ const envSchema = z.object({
   RUNS_SERVICE_API_KEY: z.string().min(1),
   BILLING_SERVICE_URL: z.string().url(),
   BILLING_SERVICE_API_KEY: z.string().min(1),
+  // chat-service: Jev judgments (classification billed input-only) used to tell
+  // the sender's own words from footers/signatures in conversation bodies.
+  CHAT_SERVICE_URL: z.string().url(),
+  CHAT_SERVICE_API_KEY: z.string().min(1),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_GMAIL_BACKFILL_DAYS: z.coerce.number().int().min(1).default(365),
   // Interval (hours) between automatic background syncs of all connected

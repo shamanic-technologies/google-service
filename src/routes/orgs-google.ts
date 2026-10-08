@@ -650,7 +650,19 @@ router.get(
       const orgId = req.orgId!;
       const q = req.validatedQuery as { email: string; limit?: number };
 
-      const result = await getConversation(orgId, q.email, q.limit);
+      const result = await getConversation(
+        orgId,
+        q.email,
+        {
+          orgId,
+          userId: req.userId!,
+          runId: req.runId!,
+          featureSlug: req.featureSlug,
+          brandId: req.brandId,
+          audienceId: req.audienceId,
+        },
+        q.limit
+      );
 
       if (!result.found) {
         // Both reasons are documented answers, not failures: the run completed.

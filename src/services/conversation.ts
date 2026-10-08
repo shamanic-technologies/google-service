@@ -1,6 +1,8 @@
 import { query } from "../db/client";
 import type { GmailMessage } from "./google-api";
 import { extractMessageBody, type BodyStatus } from "./message-body";
+import { cleanBodies, type BodyCleanStatus } from "./body-clean";
+import type { JudgeIdentity } from "./chat-service";
 import { STAFF_ADDRESSES } from "../lib/staff-mailboxes";
 import { resolveOwnerAddresses } from "./owner-addresses";
 
@@ -28,9 +30,12 @@ export interface ConversationMessage {
   snippet: string | null;
   sentAt: string | null;
   labels: string[];
+  // What the sender actually wrote (see body-clean.ts); the original is kept beside it.
   bodyText: string | null;
+  bodyTextOriginal: string | null;
   bodyHtml: string | null;
   bodyStatus: BodyStatus;
+  bodyCleanStatus: BodyCleanStatus;
 }
 
 export interface ConversationThread {
@@ -79,6 +84,7 @@ const DEFAULT_LIMIT = 200;
 export const getConversation = async (
   orgId: string,
   addressRaw: string,
+  identity: JudgeIdentity,
   limit: number = DEFAULT_LIMIT
 ): Promise<ConversationResult> => {
   const address = addressRaw.trim().toLowerCase();
@@ -135,12 +141,31 @@ export const getConversation = async (
   const truncated = rows.rows.length > limit;
   const kept = (truncated ? rows.rows.slice(0, limit) : rows.rows) as unknown as MessageRow[];
 
-  return {
-    found: true,
-    conversation: shapeConversation(address, kept, truncated, (fromEmail) =>
-      fromEmail === address ? "inbound" : fromEmail && ownEmails.has(fromEmail) ? "outbound" : "other"
-    ),
-  };
+  const conversation = shapeConversation(address, kept, truncated, (fromEmail) =>
+    fromEmail === address ? "inbound" : fromEmail && ownEmails.has(fromEmail) ? "outbound" : "other"
+  );
+
+  // What each sender actually wrote: judged once per message (persisted), the
+  // original kept beside it.
+  const all = conversation.threads.flatMap((t) => t.messages);
+  const cleaned = await cleanBodies(
+    orgId,
+    all.map((m) => ({
+      gmailMessageId: m.gmailMessageId,
+      subject: m.subject,
+      text: m.bodyTextOriginal,
+      readable: m.bodyStatus === "ok",
+    })),
+    identity
+  );
+  for (const m of all) {
+    const c = cleaned.get(m.gmailMessageId);
+    if (!c) throw new Error(`[google-service] No cleaned body for message ${m.gmailMessageId}`);
+    m.bodyText = c.text;
+    m.bodyCleanStatus = c.status;
+  }
+
+  return { found: true, conversation };
 };
 
 /**
@@ -171,8 +196,11 @@ const shapeConversation = (
       sentAt: toIso(row.sent_at) ?? toIso(row.fetched_at),
       labels: row.labels ?? [],
       bodyText: body.text,
+      bodyTextOriginal: body.text,
       bodyHtml: body.html,
       bodyStatus: body.status,
+      // The org read replaces this after cleaning; the staff read serves it as is.
+      bodyCleanStatus: "not_cleaned",
     };
   });
 
