@@ -295,6 +295,27 @@ CREATE TABLE IF NOT EXISTS google_ads_managed_accounts (
 CREATE INDEX IF NOT EXISTS idx_google_ads_managed_accounts_org ON google_ads_managed_accounts(org_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_google_ads_managed_accounts_org_brand
   ON google_ads_managed_accounts(org_id, brand_id) WHERE brand_id IS NOT NULL;
+
+-- ─── Cleaned conversation bodies (what the sender actually wrote) ───
+-- One Jev judgment per message, persisted so it is judged ONCE, never per read.
+-- cleaner_version: a row from an older cleaner is ignored and re-judged lazily.
+-- verdicts: per judged line, its text, kind, P(message) and kept flag (audit).
+-- The original body is never stored here: it stays in gmail_messages_raw.
+-- Cascades with the bronze row, so a disconnected mailbox leaves nothing.
+CREATE TABLE IF NOT EXISTS gmail_message_clean_bodies (
+  org_id TEXT NOT NULL,
+  gmail_message_id TEXT NOT NULL,
+  cleaner_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('cleaned', 'nothing_kept')),
+  clean_text TEXT,
+  verdicts JSONB NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  judged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (org_id, gmail_message_id),
+  FOREIGN KEY (org_id, gmail_message_id)
+    REFERENCES gmail_messages_raw(org_id, gmail_message_id) ON DELETE CASCADE
+);
 `;
 
 export const runMigrations = async (): Promise<void> => {

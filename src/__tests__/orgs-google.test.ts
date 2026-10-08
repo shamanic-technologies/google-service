@@ -86,6 +86,11 @@ vi.mock("../services/people-ingest", () => ({
   ingestOtherPeopleForAccount: (...args: unknown[]) => mockIngestOtherPeople(...args),
 }));
 
+const { mockCleanBodies } = vi.hoisted(() => ({ mockCleanBodies: vi.fn() }));
+vi.mock("../services/body-clean", () => ({
+  cleanBodies: (...args: unknown[]) => mockCleanBodies(...args),
+}));
+
 vi.mock("../services/runs-service", () => ({
   createRun: (...args: unknown[]) => mockCreateRun(...args),
   updateRun: (...args: unknown[]) => mockUpdateRun(...args),
@@ -954,6 +959,13 @@ describe("GET /orgs/google/conversation", () => {
   const PROSPECT = "prospect@acme.com";
   const OWNER = "owner@ourbrand.com";
 
+  beforeEach(() => {
+    mockCleanBodies.mockImplementation(
+      async (_org: string, inputs: { gmailMessageId: string; text: string | null }[]) =>
+        new Map(inputs.map((m) => [m.gmailMessageId, { text: m.text, status: "cleaned" }]))
+    );
+  });
+
   it("returns the exchange with a prospect, both directions, oldest first, with bodies", async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
@@ -1003,6 +1015,13 @@ describe("GET /orgs/google/conversation", () => {
     expect(msgs.map((m: { gmailMessageId: string }) => m.gmailMessageId)).toEqual(["m1", "m2"]);
     expect(msgs.map((m: { direction: string }) => m.direction)).toEqual(["outbound", "inbound"]);
     expect(msgs[1].bodyText).toBe("Yes, send the deck.");
+    expect(msgs[1].bodyTextOriginal).toBe("Yes, send the deck.");
+    expect(msgs[1].bodyCleanStatus).toBe("cleaned");
+    // Judgments are billed to the caller: org, user and THIS request's run.
+    const identity = mockCleanBodies.mock.calls[0][2];
+    expect(identity.orgId).toBe(idHeaders["x-org-id"]);
+    expect(identity.userId).toBe(idHeaders["x-user-id"]);
+    expect(identity.runId).toBe(TEST_CHILD_RUN_ID);
   });
 
   it("scopes the read to the caller's org", async () => {

@@ -88,7 +88,19 @@ The mirror holds exchanges the outreach provider never saw — a forwarding rule
 - **Org-scoped in the query.** Every statement filters `org_id = $1`; a caller cannot reach another org's mail by filtering afterwards.
 - **Three facts, three answers — do NOT collapse them.** `404 reason=no_google_account_connected` (this org connected no mailbox), `404 reason=no_messages` (nobody has this exchange), and `200` with `status: ok | partial | unreadable` (we hold it; some or none of it could be read). Per message, `bodyStatus` is `ok` / `empty` (it exists and genuinely says nothing) / `unavailable` (we hold it and could not read it — the text sits behind a Gmail `attachmentId`, which we do NOT fetch). Returning an empty conversation for an unreadable one would tell a customer the prospect said nothing.
 - **Ordering + truncation.** Threads oldest-first by their first message, messages oldest-first inside each. Past `limit` the MOST RECENT messages are kept and `truncated: true` is returned — an exchange is never silently cut at its head without saying so.
+- **Bodies are cleaned** (see "Cleaned bodies" below): `bodyText` = what the sender wrote, `bodyTextOriginal` = the full original, `bodyCleanStatus` says how.
 - `direction` is `inbound` (from the prospect), `outbound` (from one of the org's connected Google accounts) or `other`.
+
+### Cleaned bodies on the conversation read — what the sender actually wrote
+
+`bodyText` on `/orgs/google/conversation` is the sender's own lines; the full original is `bodyTextOriginal`, never destroyed. Two halves:
+- **Structure the mail MARKS** (`src/services/body-structure.ts`, pure, on read): reply separators (`On … wrote:` wrapped over ≤3 lines, `Le … a écrit :`, Original/Forwarded banners, Outlook `From:`+`Sent:` block), `>` lines, the `-- ` signature delimiter, URLs over 100 chars, wordless lines (`}`, rules). Nothing else goes here.
+- **Everything left is a JUDGMENT → Jev** (`src/services/body-clean.ts`): ONE `POST /orgs/judgments` per message on the request's own identity + run (chat-service declares the input-token spend), one `choice` question per line (`message`/`signature`/`footer`/`link_label`/`artifact`/`quoted`). Kept verbatim when `choice=message` or `P(message) ≥ 0.3` (benefit of the doubt). Never a regex for "is this a footer/signature", never an LLM rewrite. Measured ~1-5k input tokens per message.
+- **Judged once**: persisted in `gmail_message_clean_bodies` (key `(org_id, gmail_message_id)`, FK cascade to bronze) with `cleaner_version`; bump `CLEANER_VERSION` when the questions or structure rules change and old rows are re-judged lazily on read. `verdicts` keeps each line's kind + P(message) for audit.
+- **Bounded per read**: at most 30 messages judged per request (newest first, concurrency 6); the rest come back `bodyCleanStatus: pending` with the structural clean and are judged by a later read.
+- **Never silent**: `nothing_kept` (no line was the sender's words) serves the ORIGINAL, flagged, never an empty message; a failed judgment serves the structural clean as `judge_failed` (logged, not persisted, retried next read).
+- The staff read (`/internal/staff-mailboxes/conversation`) does NOT clean (`not_cleaned`): lead-service extracts links from that body.
+- Env: `CHAT_SERVICE_URL`, `CHAT_SERVICE_API_KEY` (shared fleet key).
 
 ### Correspondents read (`GET /orgs/google/correspondents`) — discovery for the per-person read
 
