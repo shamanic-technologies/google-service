@@ -15,7 +15,20 @@ vi.mock("../db/client", () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
+// The cleaner has its own suite (body-clean.test.ts); here it is a stand-in that
+// marks each readable body cleaned, so the wiring is what is tested.
+const { mockCleanBodies } = vi.hoisted(() => ({ mockCleanBodies: vi.fn() }));
+vi.mock("../services/body-clean", () => ({
+  cleanBodies: (...args: unknown[]) => mockCleanBodies(...args),
+}));
+
 import { getConversation, getStaffConversation } from "../services/conversation";
+
+const IDENTITY = {
+  orgId: "00000000-0000-4000-a000-000000000001",
+  userId: "00000000-0000-4000-a000-000000000002",
+  runId: "00000000-0000-4000-a000-000000000003",
+};
 
 const ORG = "00000000-0000-4000-a000-000000000001";
 const OTHER_ORG = "00000000-0000-4000-a000-0000000000ff";
@@ -41,13 +54,22 @@ const rawRow = (over: Record<string, unknown>) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCleanBodies.mockImplementation(
+    async (_org: string, inputs: { gmailMessageId: string; text: string | null; readable: boolean }[]) =>
+      new Map(
+        inputs.map((m) => [
+          m.gmailMessageId,
+          m.readable ? { text: `clean:${m.text}`, status: "cleaned" } : { text: m.text, status: "not_applicable" },
+        ])
+      )
+  );
 });
 
 describe("getConversation", () => {
   it("returns no_google_account_connected when the org has connected no mailbox", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
 
     expect(res).toEqual({ found: false, reason: "no_google_account_connected" });
   });
@@ -58,7 +80,7 @@ describe("getConversation", () => {
       .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] }); // silver participant match
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
 
     expect(res).toEqual({ found: false, reason: "no_messages" });
   });
@@ -91,7 +113,7 @@ describe("getConversation", () => {
         ],
       });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
     expect(res.found).toBe(true);
     if (!res.found) return;
 
@@ -105,8 +127,14 @@ describe("getConversation", () => {
     const msgs = c.threads[0].messages;
     expect(msgs.map((m) => m.gmailMessageId)).toEqual(["m1", "m2", "m3"]);
     expect(msgs.map((m) => m.direction)).toEqual(["outbound", "inbound", "outbound"]);
-    expect(msgs[1].bodyText).toBe("Yes, send the deck.");
+    expect(msgs[1].bodyText).toBe("clean:Yes, send the deck.");
+    expect(msgs[1].bodyTextOriginal).toBe("Yes, send the deck.");
+    expect(msgs[1].bodyCleanStatus).toBe("cleaned");
     expect(msgs[1].bodyStatus).toBe("ok");
+    // Cleaned for THIS org, billed on the caller's identity.
+    expect(mockCleanBodies).toHaveBeenCalledTimes(1);
+    expect(mockCleanBodies.mock.calls[0][0]).toBe(ORG);
+    expect(mockCleanBodies.mock.calls[0][2]).toEqual(IDENTITY);
     expect(c.threads[0].firstMessageAt).toBe("2026-01-01T00:00:00.000Z");
     expect(c.threads[0].lastMessageAt).toBe("2026-01-03T00:00:00.000Z");
   });
@@ -118,7 +146,7 @@ describe("getConversation", () => {
       .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
       .mockResolvedValueOnce({ rows: [rawRow({})] });
 
-    await getConversation(ORG, PROSPECT);
+    await getConversation(ORG, PROSPECT, IDENTITY);
 
     for (const call of mockQuery.mock.calls) {
       expect(call[0]).toContain("org_id = $1");
@@ -140,7 +168,7 @@ describe("getConversation", () => {
         ],
       });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
     expect(res.found).toBe(true);
     if (!res.found) return;
     expect(res.conversation.status).toBe("unreadable");
@@ -167,7 +195,7 @@ describe("getConversation", () => {
         ],
       });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
     expect(res.found).toBe(true);
     if (!res.found) return;
     const statuses = res.conversation.threads[0].messages.map((m) => m.bodyStatus);
@@ -183,7 +211,7 @@ describe("getConversation", () => {
       .mockResolvedValueOnce({ rows: [{ thread_id: "t7" }] })
       .mockResolvedValueOnce({ rows: [rawRow({ thread_id: "t7" })] });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
     expect(res.found).toBe(true);
     if (!res.found) return;
     expect(res.conversation.threads[0].threadId).toBe("t7");
@@ -196,7 +224,7 @@ describe("getConversation", () => {
       .mockResolvedValueOnce({ rows: [] }) // send-as aliases (SENT senders)
       .mockResolvedValueOnce({ rows: [] });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
 
     expect(res).toEqual({ found: false, reason: "no_messages" });
     expect(mockQuery).toHaveBeenCalledTimes(3);
@@ -217,7 +245,7 @@ describe("getConversation", () => {
         ],
       });
 
-    const res = await getConversation(ORG, PROSPECT, 1);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY, 1);
     expect(res.found).toBe(true);
     if (!res.found) return;
     expect(res.conversation.truncated).toBe(true);
@@ -237,7 +265,7 @@ describe("getConversation", () => {
         ],
       });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
     expect(res.found).toBe(true);
     if (!res.found) return;
     expect(res.conversation.threads.map((t) => t.threadId)).toEqual(["t1", "t2"]);
@@ -250,7 +278,7 @@ describe("getConversation", () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
-    await getConversation(ORG, "  Prospect@ACME.com ");
+    await getConversation(ORG, "  Prospect@ACME.com ", IDENTITY);
 
     expect(mockQuery.mock.calls[2][1]).toEqual([ORG, PROSPECT]);
   });
@@ -269,7 +297,7 @@ describe("getConversation", () => {
         ],
       });
 
-    const res = await getConversation(ORG, PROSPECT);
+    const res = await getConversation(ORG, PROSPECT, IDENTITY);
     expect(res.found).toBe(true);
     if (!res.found) return;
 
@@ -377,6 +405,10 @@ describe("getStaffConversation", () => {
     expect(msgs.map((m) => m.gmailMessageId)).toEqual(["k1", "p1", "k2"]);
     expect(msgs.map((m) => m.direction)).toEqual(["outbound", "inbound", "outbound"]);
     expect(msgs[0].bodyText).toBe("Hi Jamie, Kevin taking over here.");
+    // The staff read does not clean: no judgment, original served as is.
+    expect(msgs[0].bodyTextOriginal).toBe("Hi Jamie, Kevin taking over here.");
+    expect(msgs[0].bodyCleanStatus).toBe("not_cleaned");
+    expect(mockCleanBodies).not.toHaveBeenCalled();
     expect(res.conversation.truncated).toBe(false);
   });
 });

@@ -614,6 +614,24 @@ export const GoogleConversationQuerySchema = z.object({
 
 export const GoogleConversationBodyStatusEnum = z.enum(["ok", "empty", "unavailable"]);
 
+// How bodyText was derived from bodyTextOriginal:
+//   cleaned        — judged line by line; bodyText is the sender's own lines
+//   nothing_kept   — nothing left was the sender's words: bodyText is the ORIGINAL
+//                    (the message is never dropped nor shown empty)
+//   pending        — not judged yet (long exchange, judged on a later read):
+//                    only the structural clean (quotes, signature delimiter, long URLs)
+//   judge_failed   — the judgment failed: structural clean only, retried next read
+//   not_applicable — no readable body to clean
+//   not_cleaned    — this read does not clean bodies (bodyText = original)
+export const GoogleConversationBodyCleanStatusEnum = z.enum([
+  "cleaned",
+  "nothing_kept",
+  "pending",
+  "judge_failed",
+  "not_applicable",
+  "not_cleaned",
+]);
+
 export const GoogleConversationMessageSchema = z.object({
   gmailMessageId: z.string(),
   threadId: z.string(),
@@ -625,11 +643,17 @@ export const GoogleConversationMessageSchema = z.object({
   snippet: z.string().nullable(),
   sentAt: z.string().nullable(),
   labels: z.array(z.string()),
+  // What the sender actually wrote: quoted history, signature, footers,
+  // unsubscribe blocks and long tracking URLs removed (see bodyCleanStatus).
+  // Lines are kept or dropped verbatim, never rewritten.
   bodyText: z.string().nullable(),
+  // The full readable body exactly as the message carries it, before cleaning.
+  bodyTextOriginal: z.string().nullable(),
   bodyHtml: z.string().nullable(),
   // "unavailable" (we hold it and could not read it) is NEVER the same answer
   // as "empty" (it exists and says nothing).
   bodyStatus: GoogleConversationBodyStatusEnum,
+  bodyCleanStatus: GoogleConversationBodyCleanStatusEnum,
 });
 
 export const GoogleConversationThreadSchema = z.object({
