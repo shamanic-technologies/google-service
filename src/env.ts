@@ -16,9 +16,13 @@ const envSchema = z.object({
   CHAT_SERVICE_API_KEY: z.string().min(1),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_GMAIL_BACKFILL_DAYS: z.coerce.number().int().min(1).default(365),
-  // Interval (hours) between automatic background syncs of all connected
-  // Google accounts. Low-frequency by design so Neon scale-to-zero is respected.
+  // Interval (hours) between the FULL background sync of all connected Google
+  // accounts (Gmail + People + otherContacts, backfill when a mailbox has none).
   GOOGLE_SYNC_INTERVAL_HOURS: z.coerce.number().min(0.1).default(6),
+  // Interval (minutes) between Gmail-only DELTA passes over every mailbox that
+  // is already caught up. Keeps the mirror ~15 min fresh so an answer one of our
+  // people sends from Gmail clears "Needs your call" quickly (owner 2026-10-12).
+  GOOGLE_GMAIL_FRESH_INTERVAL_MINUTES: z.coerce.number().min(1).default(15),
   // Interval (hours) between Google Ads spend ingestion passes. Deliberately on
   // its OWN schedule, never chained to campaign create/update: Google publishes
   // a day's spend well after the fact, so a read that follows a write in the
