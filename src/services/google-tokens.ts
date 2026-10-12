@@ -35,6 +35,23 @@ export const listOrgGoogleAccounts = async (
   return result.rows.map(rowToToken);
 };
 
+// Every account, across orgs, whose Gmail mirror is already caught up (a
+// historyId is stored) and readable. The 15-minute fresh tick reads only these:
+// it runs Gmail DELTAS and never starts a backfill, so a deploy or a newly
+// connected mailbox cannot turn the short interval into a full-mailbox scan.
+export const listGmailDeltaAccounts = async (): Promise<GoogleAccountToken[]> => {
+  const result = await query(
+    `SELECT id, org_id, user_id, google_account_email, refresh_token,
+            access_token, access_token_expires_at, scopes,
+            gmail_history_id, people_sync_token, other_contacts_sync_token,
+            gmail_unavailable_at
+       FROM google_oauth_tokens
+       WHERE gmail_history_id IS NOT NULL AND gmail_unavailable_at IS NULL
+       ORDER BY created_at ASC`
+  );
+  return result.rows.map(rowToToken);
+};
+
 export const getGoogleAccountById = async (
   orgId: string,
   id: string
