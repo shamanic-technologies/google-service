@@ -2,7 +2,7 @@ import { createApp } from "./app";
 import { env } from "./env";
 import { runMigrations } from "./db/migrate";
 import { backfillSilver } from "./services/backfill-silver";
-import { startAutoSync } from "./services/cron-sync";
+import { startAutoSync, startGmailFreshSync } from "./services/cron-sync";
 import { startSpendSync } from "./services/spend-cron";
 
 const main = async () => {
@@ -21,6 +21,8 @@ const main = async () => {
     console.error("[google-service] silver backfill failed:", err)
   );
   startAutoSync();
+  // Gmail-only deltas every ~15 min so the mirror sees an answer we just sent.
+  startGmailFreshSync();
   // Google Ads spend ingestion — its own schedule, never chained to campaign work.
   startSpendSync();
 
