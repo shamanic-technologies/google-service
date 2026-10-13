@@ -1268,3 +1268,52 @@ describe("DELETE /orgs/google/accounts/:email", () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 });
+
+// ─── POST /orgs/google/addressed-messages ───
+
+describe("POST /orgs/google/addressed-messages", () => {
+  it("404s with reason=no_google_account_connected as a completed run", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const res = await request(app)
+      .post("/orgs/google/addressed-messages")
+      .send({ addresses: ["bob@prospect.io"] })
+      .set(idHeaders);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "No Google account is connected for this org", reason: "no_google_account_connected" });
+    expect((mockQuery.mock.calls[0] as [string, unknown[]])[1]).toEqual([TEST_ORG_ID]);
+    await vi.waitFor(() => expect(mockUpdateRun).toHaveBeenCalled());
+    expect(mockUpdateRun.mock.calls.at(-1)?.[1]).toBe("completed");
+  });
+
+  it("400s on an empty address list and on a forged cursor", async () => {
+    const empty = await request(app).post("/orgs/google/addressed-messages").send({ addresses: [] }).set(idHeaders);
+    expect(empty.status).toBe(400);
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: TEST_ACCOUNT_UUID, email: "jane@clientco.com" }] });
+    const forged = await request(app)
+      .post("/orgs/google/addressed-messages")
+      .send({ addresses: ["bob@prospect.io"], cursor: "bm9wZQ" })
+      .set(idHeaders);
+    expect(forged.status).toBe(400);
+  });
+
+  it("200s a page for a connected org", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: TEST_ACCOUNT_UUID, email: "jane@clientco.com" }] })
+      .mockResolvedValueOnce({ rows: [{ email: "jane@clientco.com" }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+    const res = await request(app)
+      .post("/orgs/google/addressed-messages")
+      .send({ addresses: ["bob@prospect.io"] })
+      .set(idHeaders);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      mailboxes: ["jane@clientco.com"],
+      ownerAddresses: ["jane@clientco.com"],
+      ignoredAddresses: [],
+      messages: [],
+      nextCursor: null,
+    });
+  });
+});
