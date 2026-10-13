@@ -331,6 +331,9 @@ const spec = {
     GoogleCorrespondentsResponse: toSchema(schemas.GoogleCorrespondentsResponseSchema),
     GoogleCorrespondentsNotConnected: toSchema(schemas.GoogleCorrespondentsNotConnectedSchema),
 GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoundSchema),
+      StaffAddressedMessagesRequest: toSchema(schemas.StaffAddressedMessagesBodySchema),
+      StaffAddressedMessagesResponse: toSchema(schemas.StaffAddressedMessagesResponseSchema),
+      StaffAddressedMessagesNotFound: toSchema(schemas.StaffAddressedMessagesNotFoundSchema),
       GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
@@ -1179,6 +1182,36 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
           "404": {
             description: "No staff mailbox mirrored, or no staff exchange with this address",
             content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleStaffConversationNotFound" } } },
+          },
+        },
+      },
+    },
+    "/internal/staff-mailboxes/addressed-messages": {
+      post: {
+        summary: "Read staff-mirrored mail sent TO or FROM our own sending mailboxes",
+        description:
+          "Internal, service-to-service (not proxied to customers). Reads only mailboxes whose Google account is a staff address, across every org that mirrors one, and returns only messages whose To/Cc contains one of the requested addresses (or an address at a requested domain) - direction=inbound - or whose From is one of them - direction=outbound (staff answering via send-as). Built to recover prospect replies that a mailbox-level forward drained into staff Gmail. Each message carries its RFC 5322 Message-ID / In-Reply-To / References (verbatim, angle brackets kept), automation headers (Auto-Submitted, Precedence, X-Autoreply, ...), the top MIME type (multipart/report = delivery report), sender, To, Cc, subject, date and the plain-text body derived from the stored payload (original, not cleaned; no LLM). Paging: keyset on an opaque cursor; send back nextCursor with the same filter until it is null. Order is stable but not chronological. `id` (= mailbox:gmailMessageId) is stable across re-reads. A staff address, or a staff mailbox domain, is refused as a filter (400). since is inclusive, until exclusive, both on sentAt. 404 reason=no_staff_mailbox_connected is a documented answer.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StaffAddressedMessagesRequest" } } },
+        },
+        responses: {
+          "200": {
+            description: "One page of matching messages; nextCursor null on the last page",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/StaffAddressedMessagesResponse" } } },
+          },
+          "400": { description: "Invalid filter (none given, staff address/domain, bad cursor)" },
+          "404": {
+            description: "No staff mailbox is mirrored",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/StaffAddressedMessagesNotFound" } } },
           },
         },
       },
