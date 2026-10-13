@@ -14,6 +14,7 @@ import {
   GoogleContactLinkPutBodySchema,
   GoogleSyncJobIdParamSchema,
   GoogleAccountEmailParamSchema,
+  OrgAddressedMessagesBodySchema,
 } from "../schemas";
 import { getGoogleOAuthClient, type CallerContext } from "../services/key-service";
 import {
@@ -29,6 +30,11 @@ import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
 import { getConversation } from "../services/conversation";
 import { listCorrespondents } from "../services/correspondents";
+import { AddressedMessagesInputError } from "../services/addressed-messages";
+import {
+  getOrgAddressedMessages,
+  type OrgAddressedMessagesInput,
+} from "../services/org-addressed-messages";
 
 const router = Router();
 
@@ -712,6 +718,37 @@ router.get(
 
       res.json(result.page);
     } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /orgs/google/addressed-messages ───
+//
+// Every message in THIS org's connected Gmail mirror sent FROM, or with in
+// To/Cc, one of the requested addresses (the org's prospects), keyset-paged.
+// Same per-message shape as /internal/staff-mailboxes/addressed-messages.
+// Org-scoped in the SQL; never calls Google.
+//   400                                    — no address / > 1000 / bad cursor
+//   404 reason=no_google_account_connected — this org has connected no mailbox
+//   200 {mailboxes, ownerAddresses, ignoredAddresses, messages, nextCursor}
+router.post(
+  "/addressed-messages",
+  validateBody(OrgAddressedMessagesBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await getOrgAddressedMessages(req.orgId!, req.validatedBody as OrgAddressedMessagesInput);
+      if (!result.found) {
+        res.locals.documentedAnswer = true;
+        res.status(404).json({ error: "No Google account is connected for this org", reason: result.reason });
+        return;
+      }
+      res.json(result.page);
+    } catch (err) {
+      if (err instanceof AddressedMessagesInputError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
       next(err);
     }
   }

@@ -334,6 +334,9 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       StaffAddressedMessagesRequest: toSchema(schemas.StaffAddressedMessagesBodySchema),
       StaffAddressedMessagesResponse: toSchema(schemas.StaffAddressedMessagesResponseSchema),
       StaffAddressedMessagesNotFound: toSchema(schemas.StaffAddressedMessagesNotFoundSchema),
+      OrgAddressedMessagesRequest: toSchema(schemas.OrgAddressedMessagesBodySchema),
+      OrgAddressedMessagesResponse: toSchema(schemas.OrgAddressedMessagesResponseSchema),
+      OrgAddressedMessagesNotConnected: toSchema(schemas.OrgAddressedMessagesNotConnectedSchema),
       GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
@@ -1212,6 +1215,36 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
           "404": {
             description: "No staff mailbox is mirrored",
             content: { "application/json": { schema: { $ref: "#/components/schemas/StaffAddressedMessagesNotFound" } } },
+          },
+        },
+      },
+    },
+    "/orgs/google/addressed-messages": {
+      post: {
+        summary: "Read this org's connected Gmail for mail exchanged with given people",
+        description:
+          "Org-scoped (the org from x-org-id; only this org's own connected Google mailboxes). Returns every mirrored message whose From is one of the requested addresses (direction=inbound), or that has one of them in To/Cc: sent from one of the org's own addresses (direction=outbound) or by a third party (direction=other). Same per-message fields as /internal/staff-mailboxes/addressed-messages (RFC 5322 Message-ID / In-Reply-To / References verbatim, automation headers, top MIME type, from/to/cc, subject, sentAt, labels, plain-text body from the stored payload, not cleaned, no LLM), plus matchedAddresses (requested addresses found in From/To/Cc). ownerAddresses = the org's own addresses (connected accounts + send-as aliases); a requested address that is one of them is dropped and listed in ignoredAddresses (it would be the whole mailbox). Paging: keyset on an opaque cursor; send back nextCursor with the same body until it is null. Order is stable, not chronological. since is inclusive, until exclusive, both on sentAt. Never calls Google. 404 reason=no_google_account_connected is a documented answer.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/OrgAddressedMessagesRequest" } } },
+        },
+        responses: {
+          "200": {
+            description: "One page of matching messages; nextCursor null on the last page",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/OrgAddressedMessagesResponse" } } },
+          },
+          "400": { description: "Invalid body (no address, more than 1000, bad cursor)" },
+          "404": {
+            description: "This org has connected no Google account",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/OrgAddressedMessagesNotConnected" } } },
           },
         },
       },
