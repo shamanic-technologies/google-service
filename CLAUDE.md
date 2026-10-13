@@ -82,6 +82,7 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `GET` | `/orgs/google/contacts` | Cursor-paginated Google contacts: bronze payload + typed silver fields, deduped by `primary_email` (text `query` matches `payload::text ILIKE`). Each item also carries `links{orgIds,brandIds,featureSlugs,status}` from `google_contact_links` (LEFT JOIN, unconditional). |
 | `GET` | `/orgs/google/conversation` | The whole exchange with ONE person, read out of the mirror: `?email=<address>` (required), optional `limit` (default 200, max 500). Both directions, grouped by thread, oldest first, with readable bodies. Never calls Google. See "Per-person conversation read" below. |
 | `GET` | `/orgs/google/correspondents` | Who the connected mailbox has been IN CONVERSATION with (the owner wrote to them), counts each way + first/last activity, `limit`/`offset` + `total`. Never calls Google. See "Correspondents read" below. |
+| `POST` | `/internal/staff-mailboxes/addressed-messages` | Internal. Staff-mirrored mail sent TO/FROM given sending addresses/domains, keyset-paged. See "Staff mail to/from our SENDING mailboxes". |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Per-person conversation read (`GET /orgs/google/conversation`)
@@ -123,6 +124,13 @@ Staff operate client brands as the agency and answer prospects by hand from thei
 - **Which mailboxes**: only tokens whose `google_account_email` is in `STAFF_ADDRESSES` (`src/lib/staff-mailboxes.ts`, hardcoded and byte-equal with the fleet's staff allowlists: dashboard/admin `admin-allowlist.ts`, api-service `STAFF_EMAILS`). A mailbox a staff member connected under another address (e.g. a Pressbeat one) is NOT read.
 - **Which messages**: only those BETWEEN a staff address and the person — staff sender with the person in To/Cc, or the person as sender with a staff address in To/Cc. The filter is in the SQL; there is NO thread expansion (a same-thread message between staff and someone else never leaves the mailbox). Direction is therefore always `outbound`/`inbound`.
 - **Internal**: not proxied by api-service; the caller (lead-service lead history) decides who may see it. 404 `no_staff_mailbox_connected` / `no_messages` are documented answers (run completed). Measured on the 673k-message mirror: ~45ms with a match, ~7ms without.
+
+### Staff mail to/from our SENDING mailboxes (`POST /internal/staff-mailboxes/addressed-messages`)
+
+`src/services/addressed-messages.ts`. Six Gandi sending domains (pressbeat.ai, growthagency.ch/.life/.forum/.network/.store) forwarded every inbound message to `kevin.lourd@gmail.com` WITHOUT a copy until 2026-10-12, so those prospect replies exist only in this mirror (~68k messages, mostly warmup). instantly-service backfills them from here (one-shot, re-runnable). Same narrow cross-org rule as the staff read:
+- **Which mailboxes**: only `STAFF_ADDRESSES` tokens. **Which messages**: To/Cc holds a requested address (or one at a requested domain) → `direction: inbound`, or From is one → `outbound` (staff answering via send-as). A staff address or a staff mailbox domain (`gmail.com`, `distribute.you`) is refused as a filter (400): it would be the whole mailbox.
+- Body `{addresses?, domains?, since?, until?, limit≤500 (200), cursor?}`; keyset on silver `id` (PK walk, ~30 ms a page; order stable, not chronological), opaque `nextCursor` until null. Payloads detoasted only for the served page.
+- Serves Message-ID / In-Reply-To / References verbatim, automation headers, top `mimeType`, original `bodyText` (no cleaning, no Jev). `id` = `mailbox:gmailMessageId`.
 
 ### Idempotency strategy: upsert-when-different
 
