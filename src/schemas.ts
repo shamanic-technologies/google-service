@@ -748,6 +748,35 @@ export const StaffAddressedMessagesNotFoundSchema = z.object({
   reason: z.literal("no_staff_mailbox_connected"),
 });
 
+// ─── An org's own Gmail, mail exchanged with given people ───
+// (POST /orgs/google/addressed-messages)
+
+export const OrgAddressedMessagesBodySchema = z.object({
+  addresses: z.array(z.string().min(3)).min(1).max(1000),
+  since: z.string().datetime({ offset: true }).optional(),
+  until: z.string().datetime({ offset: true }).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+  cursor: z.string().min(1).optional(),
+});
+
+export const OrgAddressedMessageSchema = StaffAddressedMessageSchema.extend({
+  direction: z.enum(["inbound", "outbound", "other"]),
+  matchedAddresses: z.array(z.string()),
+});
+
+export const OrgAddressedMessagesResponseSchema = z.object({
+  mailboxes: z.array(z.string()),
+  ownerAddresses: z.array(z.string()),
+  ignoredAddresses: z.array(z.string()),
+  messages: z.array(OrgAddressedMessageSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export const OrgAddressedMessagesNotConnectedSchema = z.object({
+  error: z.string(),
+  reason: z.literal("no_google_account_connected"),
+});
+
 // ─── Correspondents read (GET /orgs/google/correspondents) ───
 // Who the connected mailbox has been IN CONVERSATION with: every address the
 // owner wrote to (To/Cc of a message sent from an owner address), with counts
