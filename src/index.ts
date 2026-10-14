@@ -4,6 +4,7 @@ import { runMigrations } from "./db/migrate";
 import { backfillSilver } from "./services/backfill-silver";
 import { startAutoSync, startGmailFreshSync } from "./services/cron-sync";
 import { startSpendSync } from "./services/spend-cron";
+import { resumePendingPurges } from "./services/account-purge";
 
 const main = async () => {
   await runMigrations();
@@ -19,6 +20,10 @@ const main = async () => {
   // backfill never blocks serving.
   backfillSilver().catch((err) =>
     console.error("[google-service] silver backfill failed:", err)
+  );
+  // Mailboxes disconnected before a restart finish deleting their mirror.
+  resumePendingPurges().catch((err) =>
+    console.error("[google-service] resuming disconnected mailbox purges failed:", err)
   );
   startAutoSync();
   // Gmail-only deltas every ~15 min so the mirror sees an answer we just sent.

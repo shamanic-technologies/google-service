@@ -906,7 +906,7 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       delete: {
         summary: "Disconnect one connected Google account",
         description:
-          "Revokes the grant at Google (refresh token), then deletes the account and everything mirrored for it (Gmail messages + contacts, bronze and silver). A Google revoke failure answers 5xx and leaves the connection intact so the call can be retried. An already-revoked grant (the user removed the app at Google) is reported as grant=already_revoked. Contact links (CRM tagging) are org state and are kept.",
+          "Revokes the grant at Google (refresh token, bounded wait), then marks the account disconnected in one row update and answers: from then on it is not listed by GET /orgs/google/accounts, never synced again, and every mirror write for it is refused. Everything mirrored for it (Gmail messages + contacts, bronze and silver) is deleted in the background in batches (mirror=deleting), resumed after a restart. A Google revoke failure answers 502 reason=google_revoke_failed and leaves the connection intact (listed with disconnectError) so the call can be retried. An already-revoked grant (the user removed the app at Google) is reported as grant=already_revoked; disconnecting an account already disconnecting answers 200 the same way. Contact links (CRM tagging) are org state and are kept. Reconnecting the same address later starts a fresh mirror.",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
@@ -928,6 +928,14 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/GoogleAccountDisconnectResponse" },
+              },
+            },
+          },
+          "502": {
+            description: "Google did not confirm the revoke (reason=google_revoke_failed). The account stays connected; retry.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },

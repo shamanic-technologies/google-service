@@ -1,3 +1,4 @@
+import { AccountDisconnectedError } from "../lib/account-disconnected";
 import { query } from "../db/client";
 import { env } from "../env";
 import {
@@ -31,17 +32,29 @@ export const upsertMessage = async (
   googleAccountId: string,
   message: { id: string; threadId: string; historyId: string; payload: unknown }
 ): Promise<"inserted" | "updated" | "unchanged"> => {
+  // Guarded write: the row is written only while the account is connected (one
+  // statement, always one result row). A disconnected account throws, so an
+  // ingest that started before a disconnect stops instead of racing its purge.
   const result = await query(
-    `INSERT INTO gmail_messages_raw
-        (org_id, google_account_id, gmail_message_id, thread_id, history_id, payload)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (org_id, gmail_message_id) DO UPDATE SET
-        history_id = EXCLUDED.history_id,
-        thread_id = EXCLUDED.thread_id,
-        payload = EXCLUDED.payload,
-        fetched_at = NOW()
-     WHERE gmail_messages_raw.history_id IS DISTINCT FROM EXCLUDED.history_id
-     RETURNING id, (xmax = 0) AS inserted`,
+    `WITH acct AS (
+       SELECT EXISTS (
+         SELECT 1 FROM google_oauth_tokens
+          WHERE org_id = $1 AND id = $2::uuid AND disconnected_at IS NULL
+       ) AS connected
+     ),
+     ins AS (
+       INSERT INTO gmail_messages_raw
+          (org_id, google_account_id, gmail_message_id, thread_id, history_id, payload)
+       SELECT $1, $2::uuid, $3::text, $4::text, $5::bigint, $6::jsonb FROM acct WHERE acct.connected
+       ON CONFLICT (org_id, gmail_message_id) DO UPDATE SET
+          history_id = EXCLUDED.history_id,
+          thread_id = EXCLUDED.thread_id,
+          payload = EXCLUDED.payload,
+          fetched_at = NOW()
+       WHERE gmail_messages_raw.history_id IS DISTINCT FROM EXCLUDED.history_id
+       RETURNING id, (xmax = 0) AS inserted
+     )
+     SELECT acct.connected, ins.id, ins.inserted FROM acct LEFT JOIN ins ON true`,
     [
       orgId,
       googleAccountId,
@@ -52,7 +65,10 @@ export const upsertMessage = async (
     ]
   );
 
-  if (result.rows.length === 0) {
+  if (result.rows[0]?.connected === false) {
+    throw new AccountDisconnectedError(googleAccountId);
+  }
+  if (result.rows.length === 0 || result.rows[0].id == null) {
     return "unchanged";
   }
 

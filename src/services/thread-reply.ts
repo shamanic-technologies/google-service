@@ -81,7 +81,7 @@ const lc = (v: string | null | undefined): string => (v ?? "").trim().toLowerCas
 const loadAccounts = async (orgId: string): Promise<AccountRow[]> => {
   const res = await query(
     `SELECT id, lower(google_account_email) AS email, scopes
-       FROM google_oauth_tokens WHERE org_id = $1 ORDER BY created_at ASC`,
+       FROM google_oauth_tokens WHERE org_id = $1 AND disconnected_at IS NULL ORDER BY created_at ASC`,
     [orgId]
   );
   return res.rows.map((r) => ({ id: r.id as string, email: r.email as string, scopes: (r.scopes as string) ?? "" }));

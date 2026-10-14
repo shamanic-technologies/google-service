@@ -149,11 +149,16 @@ export type RevokeOutcome = "revoked" | "already_revoked";
 // Google answers 400 invalid_token when the grant is already gone (the user removed
 // the app, or the token expired): the end state is the one we asked for, so that is
 // reported as already_revoked rather than an error. Anything else fails loud.
+// Bounded: a disconnect waits on this call, so Google not answering must fail
+// the disconnect (retryable) within seconds rather than hang the request.
+export const GOOGLE_REVOKE_TIMEOUT_MS = 8_000;
+
 export const revokeGoogleToken = async (token: string): Promise<RevokeOutcome> => {
   const res = await fetch(GOOGLE_REVOKE_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ token }).toString(),
+    signal: AbortSignal.timeout(GOOGLE_REVOKE_TIMEOUT_MS),
   });
   if (res.ok) return "revoked";
   const text = await res.text();

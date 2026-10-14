@@ -1,8 +1,10 @@
+import { AccountDisconnectedError } from "../lib/account-disconnected";
 import { listOrgGoogleAccounts } from "./google-tokens";
-import { ingestGmailForAccount } from "./gmail-ingest";
+import { ingestGmailForAccount, type GmailIngestResult } from "./gmail-ingest";
 import {
   ingestOtherPeopleForAccount,
   ingestPeopleForAccount,
+  type PeopleIngestResult,
 } from "./people-ingest";
 import type { CallerContext } from "./key-service";
 
@@ -30,11 +32,23 @@ export const syncOrg = async (
   };
 
   for (const account of accounts) {
-    const [gmailResult, peopleResult, otherPeopleResult] = await Promise.all([
-      ingestGmailForAccount(account, caller, runId ?? "", featureSlug, brandId),
-      ingestPeopleForAccount(account, caller, runId ?? "", featureSlug, brandId),
-      ingestOtherPeopleForAccount(account, caller, runId ?? "", featureSlug, brandId),
-    ]);
+    let results: [GmailIngestResult, PeopleIngestResult, PeopleIngestResult];
+    try {
+      results = await Promise.all([
+        ingestGmailForAccount(account, caller, runId ?? "", featureSlug, brandId),
+        ingestPeopleForAccount(account, caller, runId ?? "", featureSlug, brandId),
+        ingestOtherPeopleForAccount(account, caller, runId ?? "", featureSlug, brandId),
+      ]);
+    } catch (err) {
+      // Disconnected mid-sync: its mirror is being purged, the other mailboxes
+      // of the org still sync.
+      if (!(err instanceof AccountDisconnectedError)) throw err;
+      console.warn(
+        `[google-service] sync skipped account ${account.id} (org=${orgId}): disconnected mid-sync`
+      );
+      continue;
+    }
+    const [gmailResult, peopleResult, otherPeopleResult] = results;
     summary.gmail.inserted += gmailResult.inserted;
     summary.gmail.updated += gmailResult.updated;
     summary.gmail.unchanged += gmailResult.unchanged;
