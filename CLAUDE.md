@@ -75,7 +75,7 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `POST` | `/orgs/google/auth/start` | Build authorize URL (PKCE), persist pending state |
 | `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens, then START a sync job for the org (returns `syncJobId`): a self-serve connect mirrors with no staff step. Browser callback is proxied by the dashboard server-side so identity headers are present. |
 | `GET` | `/orgs/google/accounts` | The org's connected mailboxes + health (`active` / `gmail_unavailable`). |
-| `DELETE` | `/orgs/google/accounts/{email}` | Disconnect: revoke the grant at Google FIRST (failure → 5xx, connection kept, retryable; Google `invalid_token` → `grant: already_revoked`), then delete the token row; the mirror (raw + silver messages/contacts) goes by `ON DELETE CASCADE`. `google_contact_links` (org CRM state) is kept. 404 `reason=account_not_found`. |
+| `DELETE` | `/orgs/google/accounts/{email}` | Disconnect, answers in ~the Google revoke time whatever the mailbox size (GMAIL-DISCONNECT-HANGS-1014: the in-request `ON DELETE CASCADE` over ~682k messages never answered, after the grant was revoked). See "Disconnect" below. 404 `reason=account_not_found`. |
 | `POST` | `/orgs/google/sync` | Start an async sync. Inserts a `google_sync_jobs` row, fires ingest in a detached promise, returns `202 {jobId, status:"running"}` immediately. Backfill on first run (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
 | `GET` | `/orgs/google/sync/{jobId}` | Poll job status. Returns `{jobId, status, summary, error, startedAt, finishedAt}`. Org-scoped: 404 if `jobId` belongs to another org. |
 | `GET` | `/orgs/google/messages` | Cursor-paginated Gmail messages: bronze payload + typed silver fields, ordered by silver `sent_at` desc (fallback `fetched_at`). Optional `?participant=<email>` filters to one contact's thread (From/To/Cc participant via `payload::text ILIKE`), ordered by the message's own email date (`internalDate`) newest-first. |
@@ -87,6 +87,16 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `GET` | `/orgs/google/threads/latest` | The Gmail thread holding a person's latest exchange + the owner address that answers it. Mirror read. See "Reply in the person's thread". |
 | `POST` | `/orgs/google/thread-replies` | Send ONE reply in that thread from that address (Gmail API). See "Reply in the person's thread". |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
+
+### Disconnect (`DELETE /orgs/google/accounts/{email}`)
+
+1. Revoke at Google (bounded 8 s). Failure → 502 `reason=google_revoke_failed`, row untouched except `disconnect_error` (listed as `disconnectError`), retryable. Google `invalid_token` → `grant: already_revoked`, proceed.
+2. ONE row update: `disconnected_at = NOW()`, tokens wiped. Answer `{disconnected, email, grant, mirror: "deleting"}`. A second DELETE on a disconnecting row answers 200 without calling Google.
+3. `src/services/account-purge.ts` deletes the mirror in background batches (bronze + silver by natural key, cleaned bodies by FK cascade), each batch a transaction locking the token row `FOR NO KEY UPDATE` and re-checking it is still disconnected; the row goes LAST. Boot resumes every disconnected row (`resumePendingPurges`); a failure is logged, stored in `purge_error`, retried with backoff.
+- **Every query that picks accounts filters `disconnected_at IS NULL`** (listing, sync, fresh pass, owner addresses, thread replies, staff reads, state updates). A new one must too.
+- **Every bronze write is guarded in SQL** (`upsertMessage` / `upsertContact`: `INSERT ... SELECT ... WHERE connected`) and throws `AccountDisconnectedError` (`src/lib/account-disconnected.ts`); `syncOrg` / fresh read skip that account. Never write the mirror with a plain `INSERT ... VALUES`.
+- **Reconnect**: `upsertGoogleToken` on a connected row keeps mirror + sync state (in place); on a disconnecting row it takes the row back (purge stops at its next batch), resets historyId/sync tokens so the next sync re-mirrors in full; after the purge finished it is a fresh row.
+- `google_contact_links` (org CRM state) is kept. Tests: `src/__tests__/disconnect-purge.test.ts` on PGlite with the real migration.
 
 ### Per-person conversation read (`GET /orgs/google/conversation`)
 

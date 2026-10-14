@@ -18,7 +18,7 @@ export type OwnerAddressesResult =
 
 export const resolveOwnerAddresses = async (orgId: string): Promise<OwnerAddressesResult> => {
   const accounts = await query(
-    `SELECT lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1`,
+    `SELECT lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1 AND disconnected_at IS NULL`,
     [orgId]
   );
   if (accounts.rows.length === 0) return { connected: false };

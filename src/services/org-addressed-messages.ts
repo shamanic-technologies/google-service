@@ -76,7 +76,7 @@ export const getOrgAddressedMessages = async (
   const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
 
   const accounts = await query(
-    `SELECT id, lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1`,
+    `SELECT id, lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1 AND disconnected_at IS NULL`,
     [orgId]
   );
   if (accounts.rows.length === 0) return { found: false, reason: "no_google_account_connected" };

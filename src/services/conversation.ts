@@ -263,7 +263,7 @@ export const getStaffConversation = async (
   const staff = [...STAFF_ADDRESSES];
 
   const accounts = await query(
-    `SELECT id, org_id FROM google_oauth_tokens WHERE lower(google_account_email) = ANY($1::text[])`,
+    `SELECT id, org_id FROM google_oauth_tokens WHERE lower(google_account_email) = ANY($1::text[]) AND disconnected_at IS NULL`,
     [staff]
   );
   if (accounts.rows.length === 0) return { found: false, reason: "no_staff_mailbox_connected" };

@@ -103,7 +103,7 @@ describe("ingestOtherPeopleForAccount", () => {
       nextSyncToken: "next-sync-tok",
     });
     // upsertContact returns one row with inserted=true for each call
-    mockQuery.mockResolvedValue({ rows: [{ inserted: true }], rowCount: 1 });
+    mockQuery.mockResolvedValue({ rows: [{ connected: true, id: "bronze-row", inserted: true }], rowCount: 1 });
 
     const result = await ingestOtherPeopleForAccount(
       makeAccount(),
@@ -189,7 +189,7 @@ describe("ingestOtherPeopleForAccount", () => {
         otherContacts: [{ resourceName: "otherContacts/c2", etag: "e2" }],
         nextSyncToken: "final-sync-tok",
       });
-    mockQuery.mockResolvedValue({ rows: [{ inserted: true }], rowCount: 1 });
+    mockQuery.mockResolvedValue({ rows: [{ connected: true, id: "bronze-row", inserted: true }], rowCount: 1 });
 
     const result = await ingestOtherPeopleForAccount(
       makeAccount(),
@@ -264,7 +264,7 @@ describe("ingestOtherPeopleForAccount", () => {
         otherContacts: [{ resourceName: "otherContacts/c1", etag: "e1" }],
         nextSyncToken: "fresh-tok",
       });
-    mockQuery.mockResolvedValue({ rows: [{ inserted: true }], rowCount: 1 });
+    mockQuery.mockResolvedValue({ rows: [{ connected: true, id: "bronze-row", inserted: true }], rowCount: 1 });
 
     const result = await ingestOtherPeopleForAccount(
       makeAccount({ otherContactsSyncToken: "stale-tok" }),

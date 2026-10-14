@@ -18,6 +18,8 @@ describe("revokeGoogleToken", () => {
     expect(init.body).toBe("token=rt-1");
     // Egress rule: nothing but the content type goes to Google.
     expect(init.headers).toEqual({ "Content-Type": "application/x-www-form-urlencoded" });
+    // Bounded, so a silent Google cannot hang a disconnect.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("treats 400 invalid_token as already revoked", async () => {
