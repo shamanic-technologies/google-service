@@ -1109,7 +1109,7 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       get: {
         summary: "Read the whole exchange with one person out of the Gmail mirror",
         description:
-          "Every message exchanged with the given address, both directions, grouped by thread and ordered oldest first, with readable bodies derived from the stored Gmail payload. This is a read: it never calls Google. Org-scoped in the query itself. Three answers stay distinct: 404 reason=no_google_account_connected (no mailbox connected), 404 reason=no_messages (nobody has this exchange), and 200 with status=unreadable|partial (we hold it and could not read it). Inside a 200, a message with bodyStatus=\"empty\" genuinely says nothing, while bodyStatus=\"unavailable\" means its text is not readable from the stored payload. bodyText is what the sender actually wrote: quoted history, signature, footers, unsubscribe blocks and long tracking URLs removed; lines are kept or dropped verbatim, never rewritten. The full original stays in bodyTextOriginal. Reply separators, quote markers, the signature delimiter and long URLs are removed structurally; every remaining line is classified by a Jev judgment (chat-service, input tokens billed to the calling org on this run), persisted per message so a message is judged once, never per read. bodyCleanStatus says how bodyText was derived: cleaned (judged), nothing_kept (nothing was the sender's words: bodyText is the ORIGINAL, never an empty message), pending (over this read's judging budget of 30 messages, newest judged first: structural clean only, judged on a later read), judge_failed (structural clean only, retried next read), not_applicable (no readable body).",
+          "Every message exchanged with the given address, both directions, grouped by thread and ordered oldest first, with readable bodies derived from the stored Gmail payload. Without fresh it is a read that never calls Google. With fresh=true the org's connected Gmail mailboxes are first brought up to date (one Gmail history delta per mailbox, the same pass the 15-minute refresh runs; concurrent fresh reads of one org share one refresh, and a refresh started more than 5 seconds before the read is never reused), so mail sent or received seconds ago is in the answer; when that refresh fails (or a mailbox has not finished its first sync) the answer is 502 with reason gmail_refresh_failed or gmail_mirror_not_caught_up, never the stale mirror. Org-scoped in the query itself. Three answers stay distinct: 404 reason=no_google_account_connected (no mailbox connected), 404 reason=no_messages (nobody has this exchange), and 200 with status=unreadable|partial (we hold it and could not read it). Inside a 200, a message with bodyStatus=\"empty\" genuinely says nothing, while bodyStatus=\"unavailable\" means its text is not readable from the stored payload. bodyText is what the sender actually wrote: quoted history, signature, footers, unsubscribe blocks and long tracking URLs removed; lines are kept or dropped verbatim, never rewritten. The full original stays in bodyTextOriginal. Reply separators, quote markers, the signature delimiter and long URLs are removed structurally; every remaining line is classified by a Jev judgment (chat-service, input tokens billed to the calling org on this run), persisted per message so a message is judged once, never per read. bodyCleanStatus says how bodyText was derived: cleaned (judged), nothing_kept (nothing was the sender's words: bodyText is the ORIGINAL, never an empty message), pending (over this read's judging budget of 30 messages, newest judged first: structural clean only, judged on a later read), judge_failed (structural clean only, retried next read), not_applicable (no readable body).",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
@@ -1119,6 +1119,7 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
           { $ref: "#/components/parameters/AudienceId" },
           { name: "email", in: "query", required: true, schema: { type: "string" }, description: "The prospect's email address." },
           { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500 }, description: "Maximum messages returned (default 200). When exceeded the most RECENT messages are kept and truncated=true." },
+          { name: "fresh", in: "query", required: false, schema: { type: "string", enum: ["true", "false"] }, description: "true: bring the org's Gmail mirror up to date before reading (mail sent seconds ago is included). A failed refresh answers 502, never the stale mirror." },
         ],
         responses: {
           "200": {
@@ -1134,6 +1135,21 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/GoogleConversationNotFound" },
+              },
+            },
+          },
+          "502": {
+            description: "fresh=true and the Gmail mirror could not be brought up to date (reason gmail_refresh_failed or gmail_mirror_not_caught_up). Never answered with the stale mirror.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["error", "reason"],
+                  properties: {
+                    error: { type: "string" },
+                    reason: { type: "string", enum: ["gmail_refresh_failed", "gmail_mirror_not_caught_up"] },
+                  },
+                },
               },
             },
           },

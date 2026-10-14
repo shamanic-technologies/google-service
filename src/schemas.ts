@@ -610,6 +610,13 @@ export const GoogleMessagesResponseSchema = z.object({
 export const GoogleConversationQuerySchema = z.object({
   email: z.string().min(3),
   limit: z.coerce.number().int().min(1).max(500).optional(),
+  // `true`: bring the org's Gmail mirror up to date (a Gmail history delta per
+  // connected mailbox) BEFORE reading, so mail sent or received seconds ago is
+  // in the answer. A refresh that fails answers 502, never the stale mirror.
+  fresh: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
 });
 
 export const GoogleConversationBodyStatusEnum = z.enum(["ok", "empty", "unavailable"]);
