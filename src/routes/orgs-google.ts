@@ -15,7 +15,10 @@ import {
   GoogleSyncJobIdParamSchema,
   GoogleAccountEmailParamSchema,
   OrgAddressedMessagesBodySchema,
+  GoogleLatestThreadQuerySchema,
+  GoogleThreadReplyBodySchema,
 } from "../schemas";
+import { findLatestThread, replyInThread, ReplyRefusal, type ReplyInput } from "../services/thread-reply";
 import { getGoogleOAuthClient, type CallerContext } from "../services/key-service";
 import {
   buildAuthorizeUrl,
@@ -747,6 +750,80 @@ router.post(
     } catch (err) {
       if (err instanceof AddressedMessagesInputError) {
         res.status(400).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ─── GET /orgs/google/threads/latest ───
+//
+// The Gmail thread holding the person's latest exchange with this org's
+// connected mailboxes, and the owner address a reply is written from. A read of
+// the mirror (never calls Google). email-gateway compares lastMessageAt with
+// the other transport's latest exchange to pick where a follow-up lands.
+router.get(
+  "/threads/latest",
+  validateQuery(GoogleLatestThreadQuerySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email } = req.validatedQuery as { email: string };
+      const result = await findLatestThread(req.orgId!, email);
+      if (!result.found) {
+        res.locals.documentedAnswer = true;
+        res.status(404).json({
+          error:
+            result.reason === "no_google_account_connected"
+              ? "No Google account is connected for this org"
+              : "No Gmail thread with this address that a connected mailbox can answer",
+          reason: result.reason,
+        });
+        return;
+      }
+      res.json({ thread: result.thread });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /orgs/google/thread-replies ───
+//
+// One reply IN the given thread, from the address the person wrote to / was
+// answered from, threading headers kept. Refusals are named (`code`) and send
+// nothing; a missing gmail.send grant is never worked around.
+router.post(
+  "/thread-replies",
+  validateBody(GoogleThreadReplyBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const body = req.validatedBody as ReplyInput;
+    try {
+      const result = await replyInThread(
+        req.orgId!,
+        body,
+        callerCtx(req),
+        req.runId,
+        req.featureSlug,
+        req.brandId
+      );
+      traceEvent(
+        req.runId!,
+        {
+          service: "google-service",
+          event: "gmail-thread-reply-sent",
+          detail: `thread=${result.threadId} from=${result.from} to=${result.to} message=${result.gmailMessageId}`,
+        },
+        req.headers
+      ).catch(() => {});
+      res.json(result);
+    } catch (err) {
+      if (err instanceof ReplyRefusal) {
+        res.locals.documentedAnswer = true;
+        console.warn(
+          `[google-service] thread-reply refused: code=${err.code} org=${req.orgId} thread=${body.threadId} to=${body.to}`
+        );
+        res.status(err.status).json({ error: err.message, code: err.code, ...err.details });
         return;
       }
       next(err);

@@ -166,6 +166,53 @@ export const getGmailProfile = async (
   return apiFetch(`${GMAIL_BASE}/profile`, accessToken);
 };
 
+// ─── Gmail send (a reply in an existing thread) ───
+
+export interface GmailSendResponse {
+  id: string;
+  threadId: string;
+  labelIds?: string[];
+}
+
+// users.messages.send with a raw RFC 2822 message (base64url) and the thread it
+// belongs to. Needs the gmail.send scope on the account's grant: a token minted
+// without it answers 403 (insufficient scopes), surfaced as GoogleApiError.
+export const sendGmailMessage = async (
+  accessToken: string,
+  params: { raw: string; threadId: string }
+): Promise<GmailSendResponse> => {
+  const url = `${GMAIL_BASE}/messages/send`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: params.raw, threadId: params.threadId }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new GoogleApiError(res.status, url, text);
+  }
+  return (await res.json()) as GmailSendResponse;
+};
+
+export interface GmailSendAs {
+  sendAsEmail: string;
+  isPrimary?: boolean;
+  verificationStatus?: string;
+}
+
+// The addresses this mailbox may send as (its primary + verified aliases).
+// Readable with gmail.readonly, so it needs no scope beyond the mirror's.
+export const listGmailSendAs = async (accessToken: string): Promise<GmailSendAs[]> => {
+  const res = await apiFetch<{ sendAs?: GmailSendAs[] }>(`${GMAIL_BASE}/settings/sendAs`, accessToken);
+  return res.sendAs ?? [];
+};
+
+// Google's answer to a call the grant has no scope for.
+export const isInsufficientScopeError = (err: unknown): boolean =>
+  err instanceof GoogleApiError &&
+  err.status === 403 &&
+  /insufficient(Permissions|_scope| authentication scopes)|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(err.body);
+
 // ─── People ───
 
 export interface PersonResource {

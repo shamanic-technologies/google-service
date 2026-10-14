@@ -84,6 +84,8 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `GET` | `/orgs/google/correspondents` | Who the connected mailbox has been IN CONVERSATION with (the owner wrote to them), counts each way + first/last activity, `limit`/`offset` + `total`. Never calls Google. See "Correspondents read" below. |
 | `POST` | `/orgs/google/addressed-messages` | This org's own mirror: mail FROM or To/Cc a batch of addresses (its prospects), keyset-paged. See "An org's mail with its prospects". |
 | `POST` | `/internal/staff-mailboxes/addressed-messages` | Internal. Staff-mirrored mail sent TO/FROM given sending addresses/domains, keyset-paged. See "Staff mail to/from our SENDING mailboxes". |
+| `GET` | `/orgs/google/threads/latest` | The Gmail thread holding a person's latest exchange + the owner address that answers it. Mirror read. See "Reply in the person's thread". |
+| `POST` | `/orgs/google/thread-replies` | Send ONE reply in that thread from that address (Gmail API). See "Reply in the person's thread". |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Per-person conversation read (`GET /orgs/google/conversation`)
@@ -138,6 +140,14 @@ Staff operate client brands as the agency and answer prospects by hand from thei
 `src/services/org-addressed-messages.ts`. The org-scoped twin of the staff addressed read: instantly-service folds a CLIENT's hand-written Gmail exchanges with its prospects into the Unibox (one call per org with a connected mailbox, ~15 min). Same per-message shape (shared `shapeAddressedMessage`/`loadPayloads`), plus `matchedAddresses` (requested addresses in From/To/Cc); `direction` = `outbound` (From an owner address) / `inbound` (From a requested address) / `other` (third party, requested address in To/Cc).
 - Body `{addresses (1..1000), since?, until?, limit≤500 (200), cursor?}`; page `{mailboxes, ownerAddresses, ignoredAddresses, messages, nextCursor}`. `org_id = $1` in SQL. A requested address that is an OWNER address (`resolveOwnerAddresses`) is dropped into `ignoredAddresses`, never a 400 (one bad member must not fail a batch) and never "the whole mailbox". 404 `no_google_account_connected`.
 - **The page is cut from the MATERIALIZED hits CTE (BitmapOr of from btree + to/cc GINs), never re-joined to the table**: a re-join planned a merge join walking the PK, 8.9 s on the 682k mirror; the CTE form is ~0.4 s for 1000 addresses, ~30 ms with a 1-day `since`.
+
+### Reply in the person's thread (`/orgs/google/threads/latest` + `/orgs/google/thread-replies`)
+
+`src/services/thread-reply.ts`, RIGHT-MOMENT-OR-LATER-1014 (owner 2026-10-14: a follow-up is a reply IN the thread the person wrote in last, FROM the address they wrote to). Consumer: email-gateway's `followUp: true` broadcast send, which compares `lastMessageAt` with Instantly's latest exchange and sends here when Gmail's is newer.
+- **Which thread**: among the person's threads (From/To/Cc, DRAFT/SPAM/TRASH excluded), the newest whose mailbox had an OWNER address take part. Owner is PER MAILBOX (account email + senders of that account's SENT mail). `fromAddress` = our newest sender in the thread, else the owner address the person wrote to. A thread nobody of ours took part in (mail forwarded in from a cold mailbox) is skipped.
+- **The send**: Gmail `messages.send` with `threadId`, From `fromAddress` (checked against Gmail `settings/sendAs` first: Gmail would otherwise silently rewrite From → 422 `from_address_not_send_as`), `Re: <subject>`, In-Reply-To = newest message's Message-ID, References = its References + that id. The sent message is then upserted into the mirror (`upsertMessage`); a failed record after the send is logged, never an error (the email left).
+- **Permission**: `gmail.send` is in `GOOGLE_CRM_SCOPES` since this change. A grant without it (every mailbox connected before) refuses 403 `google_send_permission_missing` with the sentence "the org owner must reconnect Google and grant send access"; Google's own insufficient-scope 403 maps to the same code. Never a fallback to another transport here.
+- No metered platform cost (the account's own OAuth grant), so no cost declaration. Not idempotent: the gateway dedupes on its key.
 
 ### Idempotency strategy: upsert-when-different
 
