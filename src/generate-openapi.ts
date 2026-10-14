@@ -337,6 +337,11 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       OrgAddressedMessagesRequest: toSchema(schemas.OrgAddressedMessagesBodySchema),
       OrgAddressedMessagesResponse: toSchema(schemas.OrgAddressedMessagesResponseSchema),
       OrgAddressedMessagesNotConnected: toSchema(schemas.OrgAddressedMessagesNotConnectedSchema),
+      GoogleLatestThreadResponse: toSchema(schemas.GoogleLatestThreadResponseSchema),
+      GoogleLatestThreadNotFound: toSchema(schemas.GoogleLatestThreadNotFoundSchema),
+      GoogleThreadReplyRequest: toSchema(schemas.GoogleThreadReplyBodySchema),
+      GoogleThreadReplyResponse: toSchema(schemas.GoogleThreadReplyResponseSchema),
+      GoogleThreadReplyRefusal: toSchema(schemas.GoogleThreadReplyRefusalSchema),
       GoogleContactLinkPutBody: toSchema(schemas.GoogleContactLinkPutBodySchema),
       GoogleContactLinkResponse: toSchema(schemas.GoogleContactLinkResponseSchema),
       GoogleAccountSummary: toSchema(schemas.GoogleAccountSummarySchema),
@@ -1245,6 +1250,71 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
           "404": {
             description: "This org has connected no Google account",
             content: { "application/json": { schema: { $ref: "#/components/schemas/OrgAddressedMessagesNotConnected" } } },
+          },
+        },
+      },
+    },
+    "/orgs/google/threads/latest": {
+      get: {
+        summary: "The Gmail thread holding a person's latest exchange with this org's connected mailboxes",
+        description:
+          "Org-scoped read of the mirror, never calls Google. Among the threads the person appears in (From/To/Cc; drafts, spam and trash excluded), the one whose newest message is newest, provided an owner address of its mailbox took part (the account email or one of its send-as aliases seen on SENT mail). fromAddress = the address a reply is written from. lastMessageAt lets a caller compare with another transport's latest exchange. sendPermission says whether the grant includes gmail.send. 404 reason=no_google_account_connected | no_messages are documented answers.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "email", in: "query", required: true, schema: { type: "string", format: "email" } },
+        ],
+        responses: {
+          "200": {
+            description: "The thread to answer in",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleLatestThreadResponse" } } },
+          },
+          "400": { description: "Invalid email" },
+          "404": {
+            description: "No connected mailbox, or no answerable thread with this person",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleLatestThreadNotFound" } } },
+          },
+        },
+      },
+    },
+    "/orgs/google/thread-replies": {
+      post: {
+        summary: "Reply in a Gmail thread from the address the person wrote to",
+        description:
+          "Sends ONE email in the given Gmail thread through the connected mailbox that holds it, From the thread's owner address (same resolution as GET /orgs/google/threads/latest; it must be one of the mailbox's Gmail send-as addresses), To the person, Subject `Re: <thread subject>`, In-Reply-To = the newest message's Message-ID, References = its References + that id. The sent message is then written to the mirror. Uses the account's own OAuth grant: no metered platform cost. Refusals (nothing sent) carry a `code`: 404 no_google_account_connected | thread_not_found, 403 google_send_permission_missing (the grant lacks gmail.send: the org owner must reconnect Google and grant send access), 422 from_address_not_send_as. Not idempotent: the caller dedupes.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleThreadReplyRequest" } } },
+        },
+        responses: {
+          "200": {
+            description: "Sent in the thread",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleThreadReplyResponse" } } },
+          },
+          "400": { description: "Invalid body" },
+          "403": {
+            description: "google_send_permission_missing",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleThreadReplyRefusal" } } },
+          },
+          "404": {
+            description: "no_google_account_connected | thread_not_found",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleThreadReplyRefusal" } } },
+          },
+          "422": {
+            description: "from_address_not_send_as",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleThreadReplyRefusal" } } },
           },
         },
       },

@@ -189,6 +189,8 @@ describe("POST /orgs/google/auth/start", () => {
     expect(res.body.url).toContain("client-abc");
     expect(res.body.url).toContain(encodeURIComponent("https://www.googleapis.com/auth/gmail.readonly"));
     expect(res.body.url).toContain(encodeURIComponent("https://www.googleapis.com/auth/contacts.readonly"));
+    // A (re)connect grants send access: a follow-up can reply in the person's Gmail thread.
+    expect(res.body.url).toContain(encodeURIComponent("https://www.googleapis.com/auth/gmail.send"));
     expect(res.body.url).toContain("code_challenge=");
     expect(res.body.url).toContain("code_challenge_method=S256");
     expect(res.body.state).toMatch(/^[A-Za-z0-9_-]+$/);

@@ -4163,6 +4163,197 @@
         ],
         "additionalProperties": false
       },
+      "GoogleLatestThreadResponse": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "object",
+            "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "googleAccountId": {
+                "type": "string"
+              },
+              "mailbox": {
+                "type": "string",
+                "description": "The connected Google account holding the thread"
+              },
+              "fromAddress": {
+                "type": "string",
+                "description": "The owner address a reply is written from: the address the person wrote to, or that answered them, on the newest message where one took part"
+              },
+              "lastMessageAt": {
+                "type": "string",
+                "nullable": true,
+                "description": "When the thread's newest message was sent (any participant)"
+              },
+              "lastMessageDirection": {
+                "type": "string",
+                "enum": [
+                  "inbound",
+                  "outbound",
+                  "other"
+                ]
+              },
+              "subject": {
+                "type": "string",
+                "nullable": true
+              },
+              "sendPermission": {
+                "type": "boolean",
+                "description": "The mailbox's Google grant includes gmail.send. False = a reply is refused with google_send_permission_missing until the org owner reconnects Google"
+              }
+            },
+            "required": [
+              "threadId",
+              "googleAccountId",
+              "mailbox",
+              "fromAddress",
+              "lastMessageAt",
+              "lastMessageDirection",
+              "subject",
+              "sendPermission"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "thread"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleLatestThreadNotFound": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "no_google_account_connected",
+              "no_messages"
+            ]
+          }
+        },
+        "required": [
+          "error",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleThreadReplyRequest": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "format": "email",
+            "description": "The person: must take part in the thread"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Gmail thread id, as served by GET /orgs/google/threads/latest"
+          },
+          "bodyHtml": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bodyText": {
+            "type": "string",
+            "description": "Plain-text part; derived from bodyHtml when absent"
+          }
+        },
+        "required": [
+          "to",
+          "threadId",
+          "bodyHtml"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleThreadReplyResponse": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "gmailMessageId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "mailbox": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string",
+            "description": "`Re: <thread subject>`"
+          },
+          "inReplyTo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Message-ID of the thread's newest message (In-Reply-To; also appended to References)"
+          },
+          "recorded": {
+            "type": "boolean",
+            "description": "The sent message was written to the mirror (false = logged; the 15-min delta picks it up)"
+          }
+        },
+        "required": [
+          "sent",
+          "gmailMessageId",
+          "threadId",
+          "mailbox",
+          "from",
+          "to",
+          "subject",
+          "inReplyTo",
+          "recorded"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleThreadReplyRefusal": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "no_google_account_connected",
+              "thread_not_found",
+              "google_send_permission_missing",
+              "from_address_not_send_as"
+            ]
+          },
+          "mailbox": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ],
+        "additionalProperties": false
+      },
       "GoogleContactLinkPutBody": {
         "type": "object",
         "properties": {
@@ -7164,6 +7355,147 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrgAddressedMessagesNotConnected"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/google/threads/latest": {
+      "get": {
+        "summary": "The Gmail thread holding a person's latest exchange with this org's connected mailboxes",
+        "description": "Org-scoped read of the mirror, never calls Google. Among the threads the person appears in (From/To/Cc; drafts, spam and trash excluded), the one whose newest message is newest, provided an owner address of its mailbox took part (the account email or one of its send-as aliases seen on SENT mail). fromAddress = the address a reply is written from. lastMessageAt lets a caller compare with another transport's latest exchange. sendPermission says whether the grant includes gmail.send. 404 reason=no_google_account_connected | no_messages are documented answers.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The thread to answer in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleLatestThreadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid email"
+          },
+          "404": {
+            "description": "No connected mailbox, or no answerable thread with this person",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleLatestThreadNotFound"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/google/thread-replies": {
+      "post": {
+        "summary": "Reply in a Gmail thread from the address the person wrote to",
+        "description": "Sends ONE email in the given Gmail thread through the connected mailbox that holds it, From the thread's owner address (same resolution as GET /orgs/google/threads/latest; it must be one of the mailbox's Gmail send-as addresses), To the person, Subject `Re: <thread subject>`, In-Reply-To = the newest message's Message-ID, References = its References + that id. The sent message is then written to the mirror. Uses the account's own OAuth grant: no metered platform cost. Refusals (nothing sent) carry a `code`: 404 no_google_account_connected | thread_not_found, 403 google_send_permission_missing (the grant lacks gmail.send: the org owner must reconnect Google and grant send access), 422 from_address_not_send_as. Not idempotent: the caller dedupes.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleThreadReplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sent in the thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleThreadReplyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body"
+          },
+          "403": {
+            "description": "google_send_permission_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleThreadReplyRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no_google_account_connected | thread_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleThreadReplyRefusal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "from_address_not_send_as",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleThreadReplyRefusal"
                 }
               }
             }

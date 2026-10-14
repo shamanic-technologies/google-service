@@ -777,6 +777,62 @@ export const OrgAddressedMessagesNotConnectedSchema = z.object({
   reason: z.literal("no_google_account_connected"),
 });
 
+// ─── Reply in the person's latest Gmail thread (RIGHT-MOMENT-OR-LATER-1014) ───
+
+export const GoogleLatestThreadQuerySchema = z.object({
+  email: z.string().email(),
+});
+
+export const GoogleLatestThreadSchema = z.object({
+  threadId: z.string(),
+  googleAccountId: z.string(),
+  mailbox: z.string().describe("The connected Google account holding the thread"),
+  fromAddress: z.string().describe("The owner address a reply is written from: the address the person wrote to, or that answered them, on the newest message where one took part"),
+  lastMessageAt: z.string().nullable().describe("When the thread's newest message was sent (any participant)"),
+  lastMessageDirection: z.enum(["inbound", "outbound", "other"]),
+  subject: z.string().nullable(),
+  sendPermission: z.boolean().describe("The mailbox's Google grant includes gmail.send. False = a reply is refused with google_send_permission_missing until the org owner reconnects Google"),
+});
+
+export const GoogleLatestThreadResponseSchema = z.object({ thread: GoogleLatestThreadSchema });
+
+export const GoogleLatestThreadNotFoundSchema = z.object({
+  error: z.string(),
+  reason: z.enum(["no_google_account_connected", "no_messages"]),
+});
+
+export const GoogleThreadReplyBodySchema = z.object({
+  to: z.string().email().describe("The person: must take part in the thread"),
+  threadId: z.string().min(1).describe("Gmail thread id, as served by GET /orgs/google/threads/latest"),
+  bodyHtml: z.string().min(1),
+  bodyText: z.string().optional().describe("Plain-text part; derived from bodyHtml when absent"),
+});
+
+export const GoogleThreadReplyResponseSchema = z.object({
+  sent: z.literal(true),
+  gmailMessageId: z.string(),
+  threadId: z.string(),
+  mailbox: z.string(),
+  from: z.string(),
+  to: z.string(),
+  subject: z.string().describe("`Re: <thread subject>`"),
+  inReplyTo: z.string().nullable().describe("Message-ID of the thread's newest message (In-Reply-To; also appended to References)"),
+  recorded: z.boolean().describe("The sent message was written to the mirror (false = logged; the 15-min delta picks it up)"),
+});
+
+export const GoogleThreadReplyRefusalSchema = z.object({
+  error: z.string(),
+  code: z.enum([
+    "no_google_account_connected",
+    "thread_not_found",
+    "google_send_permission_missing",
+    "from_address_not_send_as",
+  ]),
+  mailbox: z.string().optional(),
+  from: z.string().optional(),
+  threadId: z.string().optional(),
+});
+
 // ─── Correspondents read (GET /orgs/google/correspondents) ───
 // Who the connected mailbox has been IN CONVERSATION with: every address the
 // owner wrote to (To/Cc of a message sent from an owner address), with counts
