@@ -939,6 +939,10 @@ export const GoogleAccountSummarySchema = z.object({
   gmailUnavailableSince: z.string().nullable(),
   scopes: z.array(z.string()),
   connectedAt: z.string(),
+  disconnectError: z
+    .string()
+    .nullable()
+    .describe("Why the last disconnect attempt failed (the mailbox is still connected; retry the disconnect). Null when none failed."),
 });
 
 export const GoogleAccountsListResponseSchema = z.object({
@@ -953,6 +957,9 @@ export const GoogleAccountDisconnectResponseSchema = z.object({
   disconnected: z.literal(true),
   email: z.string(),
   grant: z.enum(["revoked", "already_revoked"]),
+  mirror: z
+    .literal("deleting")
+    .describe("The mailbox's mirrored mail and contacts are being deleted in the background."),
 });
 
 // ─── Error ───

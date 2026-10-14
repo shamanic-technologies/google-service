@@ -86,6 +86,11 @@ vi.mock("../services/people-ingest", () => ({
   ingestOtherPeopleForAccount: (...args: unknown[]) => mockIngestOtherPeople(...args),
 }));
 
+const { mockSchedulePurge } = vi.hoisted(() => ({ mockSchedulePurge: vi.fn() }));
+vi.mock("../services/account-purge", () => ({
+  schedulePurge: (...args: unknown[]) => mockSchedulePurge(...args),
+}));
+
 const { mockCleanBodies } = vi.hoisted(() => ({ mockCleanBodies: vi.fn() }));
 vi.mock("../services/body-clean", () => ({
   cleanBodies: (...args: unknown[]) => mockCleanBodies(...args),
@@ -738,6 +743,7 @@ describe("GET /orgs/google/accounts", () => {
       connectedAt: "2026-05-01T12:00:00.000Z",
       gmailUnavailableReason: null,
       gmailUnavailableSince: null,
+      disconnectError: null,
     });
     // A mailbox Google says has no Gmail reads as such, with when it stopped.
     expect(res.body.accounts[1]).toMatchObject({
@@ -749,7 +755,24 @@ describe("GET /orgs/google/accounts", () => {
     const sql = mockQuery.mock.calls[0][0] as string;
     const params = mockQuery.mock.calls[0][1] as unknown[];
     expect(sql).toContain("WHERE org_id = $1");
+    // A disconnecting mailbox is never listed, even while its mirror purges.
+    expect(sql).toContain("disconnected_at IS NULL");
     expect(params).toEqual([TEST_ORG_ID]);
+  });
+
+  it("lists why the last disconnect failed on a mailbox still connected", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          google_account_email: "alice@example.com",
+          scopes: "https://www.googleapis.com/auth/gmail.readonly",
+          created_at: new Date("2026-05-01T12:00:00.000Z"),
+          disconnect_error: "google_revoke_failed: 503 down",
+        },
+      ],
+    });
+    const res = await request(app).get("/orgs/google/accounts").set(idHeaders);
+    expect(res.body.accounts[0].disconnectError).toBe("google_revoke_failed: 503 down");
   });
 });
 
@@ -1321,29 +1344,44 @@ describe("DELETE /orgs/google/accounts/:email", () => {
     id: TEST_ACCOUNT_UUID,
     google_account_email: "alice@example.com",
     refresh_token: "rt-alice",
+    disconnected_at: null,
   };
 
-  it("revokes the grant at Google, deletes the account (mirror cascades), returns 200", async () => {
+  it("revokes the grant, marks the account disconnected in one update, purges in the background, answers 200", async () => {
     mockQuery.mockImplementation(async (sql: string) =>
-      sql.includes("SELECT") ? { rows: [tokenRow] } : { rows: [] }
+      sql.includes("SELECT") ? { rows: [tokenRow] } : { rows: [], rowCount: 1 }
     );
     mockRevokeGoogleToken.mockResolvedValueOnce("revoked");
+    // The purge never resolves here: the answer must not wait for it.
+    mockSchedulePurge.mockReturnValue(new Promise(() => undefined));
 
     const res = await request(app)
       .delete(`/orgs/google/accounts/${encodeURIComponent("Alice@Example.com")}`)
       .set(idHeaders);
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ disconnected: true, email: "alice@example.com", grant: "revoked" });
+    expect(res.body).toEqual({
+      disconnected: true,
+      email: "alice@example.com",
+      grant: "revoked",
+      mirror: "deleting",
+    });
     expect(mockRevokeGoogleToken).toHaveBeenCalledWith("rt-alice");
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("lower(google_account_email) = lower($2)"),
       [TEST_ORG_ID, "Alice@Example.com"]
     );
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining("DELETE FROM google_oauth_tokens WHERE org_id = $1 AND id = $2"),
-      [TEST_ORG_ID, TEST_ACCOUNT_UUID]
+    const mark = mockQuery.mock.calls.find(([sql]) => (sql as string).includes("SET disconnected_at = NOW()"));
+    expect(mark).toBeDefined();
+    expect(mark![0]).toContain("refresh_token = ''");
+    expect(mark![0]).toContain("WHERE org_id = $1 AND id = $2");
+    expect(mark![1]).toEqual([TEST_ORG_ID, TEST_ACCOUNT_UUID]);
+    // The mirror is never deleted in the request.
+    expect(mockQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM"),
+      expect.anything()
     );
+    expect(mockSchedulePurge).toHaveBeenCalledWith(TEST_ORG_ID, TEST_ACCOUNT_UUID);
   });
 
   it("reports an already-revoked grant and still disconnects", async () => {
@@ -1358,6 +1396,22 @@ describe("DELETE /orgs/google/accounts/:email", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.grant).toBe("already_revoked");
+    expect(mockSchedulePurge).toHaveBeenCalled();
+  });
+
+  it("answers 200 again for an account already disconnecting, without calling Google", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ ...tokenRow, refresh_token: "", disconnected_at: new Date() }],
+    });
+
+    const res = await request(app)
+      .delete("/orgs/google/accounts/alice%40example.com")
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ disconnected: true, grant: "already_revoked", mirror: "deleting" });
+    expect(mockRevokeGoogleToken).not.toHaveBeenCalled();
+    expect(mockSchedulePurge).toHaveBeenCalledWith(TEST_ORG_ID, TEST_ACCOUNT_UUID);
   });
 
   it("404s with reason=account_not_found when the org has no such mailbox, touching nothing", async () => {
@@ -1373,7 +1427,7 @@ describe("DELETE /orgs/google/accounts/:email", () => {
     expect(mockQuery).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the connection when Google refuses the revoke (fail loud, retryable)", async () => {
+  it("keeps the connection when Google refuses the revoke: 502, error recorded for the listing, retryable", async () => {
     mockQuery.mockImplementation(async (sql: string) =>
       sql.includes("SELECT") ? { rows: [tokenRow] } : { rows: [] }
     );
@@ -1383,11 +1437,17 @@ describe("DELETE /orgs/google/accounts/:email", () => {
       .delete("/orgs/google/accounts/alice%40example.com")
       .set(idHeaders);
 
-    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(res.status).toBe(502);
+    expect(res.body.reason).toBe("google_revoke_failed");
     expect(mockQuery).not.toHaveBeenCalledWith(
-      expect.stringContaining("DELETE FROM google_oauth_tokens"),
+      expect.stringContaining("SET disconnected_at"),
       expect.anything()
     );
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("SET disconnect_error = $3"),
+      [TEST_ORG_ID, TEST_ACCOUNT_UUID, "google_revoke_failed: Google token revoke failed: 503 down"]
+    );
+    expect(mockSchedulePurge).not.toHaveBeenCalled();
   });
 
   it("rejects a non-email path segment with 400", async () => {

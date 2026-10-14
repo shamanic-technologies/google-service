@@ -102,6 +102,18 @@ END $$;
 ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS gmail_unavailable_at TIMESTAMPTZ;
 ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS gmail_unavailable_reason TEXT;
 
+-- Disconnect (GMAIL-DISCONNECT-HANGS-1014). DELETE /orgs/google/accounts/{email}
+-- revokes the grant, wipes the token and sets disconnected_at in ONE row update,
+-- then answers: from that instant the mailbox is not listed, not synced and not
+-- written to. Its mirror is deleted in the background in batches
+-- (src/services/account-purge.ts), resumed on boot, and the row itself goes last.
+-- disconnect_error: why the last disconnect attempt failed (the account is still
+-- connected and listed with it). purge_error: why the last purge attempt failed
+-- (retried; the account is no longer listed).
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS disconnected_at TIMESTAMPTZ;
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS disconnect_error TEXT;
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS purge_error TEXT;
+
 CREATE TABLE IF NOT EXISTS gmail_messages_raw (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id TEXT NOT NULL,

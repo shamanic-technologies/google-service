@@ -28,7 +28,7 @@ export const listOrgGoogleAccounts = async (
             gmail_history_id, people_sync_token, other_contacts_sync_token,
             gmail_unavailable_at
        FROM google_oauth_tokens
-       WHERE org_id = $1
+       WHERE org_id = $1 AND disconnected_at IS NULL
        ORDER BY created_at ASC`,
     [orgId]
   );
@@ -47,6 +47,7 @@ export const listGmailDeltaAccounts = async (): Promise<GoogleAccountToken[]> =>
             gmail_unavailable_at
        FROM google_oauth_tokens
        WHERE gmail_history_id IS NOT NULL AND gmail_unavailable_at IS NULL
+         AND disconnected_at IS NULL
        ORDER BY created_at ASC`
   );
   return result.rows.map(rowToToken);
@@ -62,7 +63,7 @@ export const getGoogleAccountById = async (
             gmail_history_id, people_sync_token, other_contacts_sync_token,
             gmail_unavailable_at
        FROM google_oauth_tokens
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id]
   );
   if (result.rows.length === 0) return null;
@@ -101,6 +102,26 @@ export const upsertGoogleToken = async (params: {
          access_token_expires_at, scopes, feature_slug, brand_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (org_id, google_account_email) DO UPDATE SET
+        -- Connecting an address that is still CONNECTED keeps its mirror and sync
+        -- state (reconnect in place). Connecting one whose disconnect is still
+        -- purging takes the row back: the purge stops at its next batch (it locks
+        -- this row per batch, so this waits for an in-flight batch) and the sync
+        -- state is reset so the next sync re-mirrors in full what was purged.
+        gmail_history_id = CASE WHEN google_oauth_tokens.disconnected_at IS NULL
+                                THEN google_oauth_tokens.gmail_history_id END,
+        people_sync_token = CASE WHEN google_oauth_tokens.disconnected_at IS NULL
+                                 THEN google_oauth_tokens.people_sync_token END,
+        other_contacts_sync_token = CASE WHEN google_oauth_tokens.disconnected_at IS NULL
+                                         THEN google_oauth_tokens.other_contacts_sync_token END,
+        gmail_unavailable_at = CASE WHEN google_oauth_tokens.disconnected_at IS NULL
+                                    THEN google_oauth_tokens.gmail_unavailable_at END,
+        gmail_unavailable_reason = CASE WHEN google_oauth_tokens.disconnected_at IS NULL
+                                        THEN google_oauth_tokens.gmail_unavailable_reason END,
+        created_at = CASE WHEN google_oauth_tokens.disconnected_at IS NULL
+                          THEN google_oauth_tokens.created_at ELSE NOW() END,
+        disconnected_at = NULL,
+        disconnect_error = NULL,
+        purge_error = NULL,
         refresh_token = EXCLUDED.refresh_token,
         access_token = EXCLUDED.access_token,
         access_token_expires_at = EXCLUDED.access_token_expires_at,
@@ -111,7 +132,8 @@ export const upsertGoogleToken = async (params: {
         updated_at = NOW()
      RETURNING id, org_id, user_id, google_account_email, refresh_token,
                access_token, access_token_expires_at, scopes,
-               gmail_history_id, people_sync_token, other_contacts_sync_token`,
+               gmail_history_id, people_sync_token, other_contacts_sync_token,
+               gmail_unavailable_at`,
     [
       params.orgId,
       params.userId,
@@ -138,7 +160,7 @@ export const setGmailUnavailable = async (
                                        ELSE COALESCE(gmail_unavailable_at, NOW()) END,
            gmail_unavailable_reason = $3::text,
            updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id, reason]
   );
 };
@@ -151,7 +173,7 @@ export const updateGmailHistoryId = async (
   await query(
     `UPDATE google_oauth_tokens
        SET gmail_history_id = $3, updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id, historyId]
   );
 };
@@ -164,7 +186,7 @@ export const updatePeopleSyncToken = async (
   await query(
     `UPDATE google_oauth_tokens
        SET people_sync_token = $3, updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id, syncToken]
   );
 };
@@ -177,7 +199,7 @@ export const updateOtherContactsSyncToken = async (
   await query(
     `UPDATE google_oauth_tokens
        SET other_contacts_sync_token = $3, updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id, syncToken]
   );
 };
@@ -189,7 +211,7 @@ export const clearPeopleSyncToken = async (
   await query(
     `UPDATE google_oauth_tokens
        SET people_sync_token = NULL, updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id]
   );
 };
@@ -201,7 +223,7 @@ export const clearOtherContactsSyncToken = async (
   await query(
     `UPDATE google_oauth_tokens
        SET other_contacts_sync_token = NULL, updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id]
   );
 };
@@ -215,7 +237,7 @@ export const updateAccessToken = async (
   await query(
     `UPDATE google_oauth_tokens
        SET access_token = $3, access_token_expires_at = $4, updated_at = NOW()
-       WHERE org_id = $1 AND id = $2`,
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id, accessToken, expiresAt]
   );
 };
@@ -295,3 +317,4 @@ export const createAccessTokenProvider = (
     forceRefresh: refresh,
   };
 };
+

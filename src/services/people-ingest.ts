@@ -1,3 +1,4 @@
+import { AccountDisconnectedError } from "../lib/account-disconnected";
 import { query } from "../db/client";
 import {
   isExpiredSyncTokenError,
@@ -34,16 +35,26 @@ const upsertContact = async (
   googleAccountId: string,
   person: PersonResource
 ): Promise<"inserted" | "updated" | "unchanged"> => {
+  // Guarded write: see upsertMessage in gmail-ingest.ts.
   const result = await query(
-    `INSERT INTO google_contacts_raw
-        (org_id, google_account_id, resource_name, etag, payload)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (org_id, resource_name) DO UPDATE SET
-        etag = EXCLUDED.etag,
-        payload = EXCLUDED.payload,
-        fetched_at = NOW()
-     WHERE google_contacts_raw.etag IS DISTINCT FROM EXCLUDED.etag
-     RETURNING id, (xmax = 0) AS inserted`,
+    `WITH acct AS (
+       SELECT EXISTS (
+         SELECT 1 FROM google_oauth_tokens
+          WHERE org_id = $1 AND id = $2::uuid AND disconnected_at IS NULL
+       ) AS connected
+     ),
+     ins AS (
+       INSERT INTO google_contacts_raw
+          (org_id, google_account_id, resource_name, etag, payload)
+       SELECT $1, $2::uuid, $3::text, $4::text, $5::jsonb FROM acct WHERE acct.connected
+       ON CONFLICT (org_id, resource_name) DO UPDATE SET
+          etag = EXCLUDED.etag,
+          payload = EXCLUDED.payload,
+          fetched_at = NOW()
+       WHERE google_contacts_raw.etag IS DISTINCT FROM EXCLUDED.etag
+       RETURNING id, (xmax = 0) AS inserted
+     )
+     SELECT acct.connected, ins.id, ins.inserted FROM acct LEFT JOIN ins ON true`,
     [
       orgId,
       googleAccountId,
@@ -53,7 +64,10 @@ const upsertContact = async (
     ]
   );
 
-  if (result.rows.length === 0) {
+  if (result.rows[0]?.connected === false) {
+    throw new AccountDisconnectedError(googleAccountId);
+  }
+  if (result.rows.length === 0 || result.rows[0].id == null) {
     return "unchanged";
   }
 

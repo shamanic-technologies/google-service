@@ -255,7 +255,7 @@ export const getAddressedMessages = async (
   const accounts = await query(
     `SELECT id, org_id, lower(google_account_email) AS email
        FROM google_oauth_tokens
-      WHERE lower(google_account_email) = ANY($1::text[])`,
+      WHERE lower(google_account_email) = ANY($1::text[]) AND disconnected_at IS NULL`,
     [staff]
   );
   if (accounts.rows.length === 0) return { found: false, reason: "no_staff_mailbox_connected" };

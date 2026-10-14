@@ -28,7 +28,9 @@ import {
   generateState,
   GOOGLE_CRM_SCOPES,
   revokeGoogleToken,
+  type RevokeOutcome,
 } from "../services/google-oauth";
+import { schedulePurge } from "../services/account-purge";
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
 import { getConversation } from "../services/conversation";
@@ -197,9 +199,9 @@ router.get(
       const orgId = req.orgId!;
       const result = await query(
         `SELECT google_account_email, scopes, created_at,
-                gmail_unavailable_at, gmail_unavailable_reason
+                gmail_unavailable_at, gmail_unavailable_reason, disconnect_error
            FROM google_oauth_tokens
-           WHERE org_id = $1
+           WHERE org_id = $1 AND disconnected_at IS NULL
            ORDER BY created_at ASC`,
         [orgId]
       );
@@ -215,6 +217,9 @@ router.get(
           : null,
         scopes: (row.scopes as string).split(" ").filter((s) => s.length > 0),
         connectedAt: (row.created_at as Date).toISOString(),
+        // Why the last disconnect attempt failed (the mailbox is still connected
+        // and the owner can retry). Null when none failed.
+        disconnectError: (row.disconnect_error as string | null) ?? null,
       }));
 
       res.json({ accounts });
@@ -226,11 +231,19 @@ router.get(
 
 // ─── DELETE /orgs/google/accounts/:email ───
 //
-// Disconnects one mailbox: revokes the grant at Google first (so a failure leaves
-// the connection intact and retryable, never a deleted row with a live grant),
-// then deletes the token row. Every mirrored row (gmail_messages_raw/silver,
-// google_contacts_raw/silver) references it ON DELETE CASCADE, so the mirror goes
-// with it. google_contact_links is per-org CRM tagging, not mirror, and stays.
+// Disconnects one mailbox and answers in about the time Google takes to revoke,
+// whatever the mailbox size (GMAIL-DISCONNECT-HANGS-1014: the in-request cascade
+// over ~682k mirrored messages never answered, after the grant was revoked):
+//   1. revoke the grant at Google (bounded). A failure keeps the connection
+//      intact and retryable, records why on the row (listed as disconnectError)
+//      and answers 502: never a dead grant on a row still listed as connected
+//      by OUR doing, never a deleted row with a live grant.
+//   2. ONE row update: disconnected_at = NOW(), refresh/access tokens wiped. From
+//      that instant the mailbox is not listed, not synced, and every mirror write
+//      for it is refused in SQL (gmail-ingest / people-ingest).
+//   3. the mirror (bronze + silver messages/contacts, cleaned bodies) is deleted
+//      in the background in batches, resumed on boot (account-purge.ts).
+// google_contact_links is per-org CRM tagging, not mirror, and stays.
 router.delete(
   "/accounts/:email",
   validateParams(GoogleAccountEmailParamSchema),
@@ -240,7 +253,7 @@ router.delete(
       const { email } = req.validatedParams as { email: string };
 
       const found = await query(
-        `SELECT id, google_account_email, refresh_token
+        `SELECT id, google_account_email, refresh_token, disconnected_at
            FROM google_oauth_tokens
            WHERE org_id = $1 AND lower(google_account_email) = lower($2)`,
         [orgId, email]
@@ -256,21 +269,63 @@ router.delete(
         id: string;
         google_account_email: string;
         refresh_token: string;
+        disconnected_at: Date | null;
       };
 
-      const revoke = await revokeGoogleToken(row.refresh_token);
+      // Already disconnected (a second click, a retry after a timeout): the
+      // grant is gone and the purge is under way; make sure it is.
+      if (row.disconnected_at) {
+        void schedulePurge(orgId, row.id);
+        res.json({
+          disconnected: true,
+          email: row.google_account_email,
+          grant: "already_revoked",
+          mirror: "deleting",
+        });
+        return;
+      }
 
-      await query(`DELETE FROM google_oauth_tokens WHERE org_id = $1 AND id = $2`, [
-        orgId,
-        row.id,
-      ]);
+      let revoke: RevokeOutcome;
+      try {
+        revoke = await revokeGoogleToken(row.refresh_token);
+      } catch (err) {
+        const message = (err as Error)?.message ?? String(err);
+        console.error(
+          `[google-service] disconnect FAILED org=${orgId} account=${row.id}: Google revoke: ${message}`
+        );
+        await query(
+          `UPDATE google_oauth_tokens SET disconnect_error = $3, updated_at = NOW()
+            WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
+          [orgId, row.id, `google_revoke_failed: ${message}`.slice(0, 2000)]
+        ).catch((e) => console.error("[google-service] could not record disconnect_error:", e));
+        res.status(502).json({
+          error: `Google did not confirm the revoke of ${row.google_account_email}: ${message}. The mailbox is still connected; retry the disconnect.`,
+          reason: "google_revoke_failed",
+        });
+        return;
+      }
+
+      await query(
+        `UPDATE google_oauth_tokens
+            SET disconnected_at = NOW(),
+                refresh_token = '',
+                access_token = NULL,
+                access_token_expires_at = NULL,
+                disconnect_error = NULL,
+                purge_error = NULL,
+                updated_at = NOW()
+          WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
+        [orgId, row.id]
+      );
+
+      void schedulePurge(orgId, row.id);
 
       traceEvent(
         req.runId!,
         {
           service: "google-service",
           event: "google-crm-account-disconnected",
-          detail: `email=${row.google_account_email} grant=${revoke}`,
+          detail: `email=${row.google_account_email} grant=${revoke} mirror=deleting`,
         },
         req.headers
       ).catch(() => {});
@@ -279,6 +334,7 @@ router.delete(
         disconnected: true,
         email: row.google_account_email,
         grant: revoke,
+        mirror: "deleting",
       });
     } catch (err) {
       next(err);

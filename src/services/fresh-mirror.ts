@@ -1,4 +1,5 @@
 import { ingestGmailForAccount } from "./gmail-ingest";
+import { AccountDisconnectedError } from "../lib/account-disconnected";
 import { listOrgGoogleAccounts } from "./google-tokens";
 import type { CallerContext } from "./key-service";
 
@@ -54,6 +55,8 @@ const refreshOrg = async (orgId: string, caller: CallerContext, runId: string): 
       try {
         await ingestGmailForAccount(account, caller, runId, undefined, undefined);
       } catch (err) {
+        // Disconnected while refreshing: the mailbox left, nothing to vouch for.
+        if (err instanceof AccountDisconnectedError) return;
         failures.push(`${account.googleAccountEmail}: ${(err as Error).message}`);
       }
     })

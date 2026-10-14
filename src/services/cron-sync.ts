@@ -17,7 +17,7 @@ const FRESH_FIRST_TICK_MS = 60_000;
 // Uses the shared pool (a fresh connection is acquired per query), so no
 // long-lived connection is held between ticks.
 export const runAutoSyncOnce = async (): Promise<void> => {
-  const res = await query(`SELECT DISTINCT org_id FROM google_oauth_tokens`);
+  const res = await query(`SELECT DISTINCT org_id FROM google_oauth_tokens WHERE disconnected_at IS NULL`);
   const orgIds = res.rows.map((r) => r.org_id as string);
   console.log(`[google-service] auto-sync starting for ${orgIds.length} org(s)`);
 
