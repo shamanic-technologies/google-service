@@ -32,6 +32,7 @@ import {
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
 import { getConversation } from "../services/conversation";
+import { ensureFreshGmailMirror, FreshMirrorError } from "../services/fresh-mirror";
 import { listCorrespondents } from "../services/correspondents";
 import { AddressedMessagesInputError } from "../services/addressed-messages";
 import {
@@ -642,7 +643,9 @@ router.get(
 //
 // The whole exchange with one person, read out of the Gmail mirror: both
 // directions, grouped by thread, oldest first, with readable bodies (derived
-// from the stored payload — this endpoint never calls Google).
+// from the stored payload). Without `fresh` it never calls Google; with
+// `fresh=true` it first runs the Gmail history delta for the org's mailboxes
+// (coalesced, see services/fresh-mirror.ts) and answers 502 when that fails.
 //
 // Three distinct answers, deliberately not collapsed into one:
 //   404 reason=no_google_account_connected — this org has connected no mailbox
@@ -657,7 +660,18 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = req.orgId!;
-      const q = req.validatedQuery as { email: string; limit?: number };
+      const q = req.validatedQuery as { email: string; limit?: number; fresh: boolean };
+
+      if (q.fresh) {
+        try {
+          await ensureFreshGmailMirror(orgId, callerCtx(req), req.runId ?? "");
+        } catch (err) {
+          if (!(err instanceof FreshMirrorError)) throw err;
+          console.error(`[google-service] fresh conversation read failed for org=${orgId}: ${err.message}`);
+          res.status(502).json({ error: err.message, reason: err.reason });
+          return;
+        }
+      }
 
       const result = await getConversation(
         orgId,

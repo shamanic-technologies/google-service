@@ -1134,6 +1134,132 @@ describe("GET /orgs/google/conversation", () => {
   });
 });
 
+// ─── GET /orgs/google/conversation?fresh=true (RIGHT-MOMENT-OR-LATER-1014) ───
+
+describe("GET /orgs/google/conversation?fresh=true", () => {
+  const PROSPECT = "prospect@acme.com";
+  const OWNER = "owner@ourbrand.com";
+  const caughtUp = {
+    id: TEST_ACCOUNT_UUID,
+    orgId: TEST_ORG_ID,
+    userId: TEST_USER_ID,
+    googleAccountEmail: OWNER,
+    refreshToken: "rt",
+    accessToken: null,
+    accessTokenExpiresAt: null,
+    scopes: "",
+    gmailHistoryId: "100",
+    peopleSyncToken: null,
+    otherContactsSyncToken: null,
+    gmailUnavailableAt: null,
+  };
+  // The hand-written answer: at Google, sent seconds ago, not yet in the mirror.
+  const handAnswer = {
+    gmail_message_id: "m-hand",
+    thread_id: "t1",
+    payload: { payload: { mimeType: "text/plain", body: { data: b64conv("Thanks, booked you for Friday.") } } },
+    fetched_at: new Date(),
+    from_email: OWNER,
+    from_name: "Owner",
+    to_emails: [PROSPECT],
+    subject: "Re: Quick question",
+    snippet: "Thanks",
+    sent_at: new Date(),
+    labels: ["SENT"],
+  };
+
+  // A tiny mirror: the conversation read sees exactly what has been ingested.
+  let mirror: (typeof handAnswer)[];
+  beforeEach(async () => {
+    const { resetFreshMirrorState } = await import("../services/fresh-mirror");
+    resetFreshMirrorState();
+    mirror = [];
+    mockCleanBodies.mockImplementation(
+      async (_org: string, inputs: { gmailMessageId: string; text: string | null }[]) =>
+        new Map(inputs.map((m) => [m.gmailMessageId, { text: m.text, status: "cleaned" }]))
+    );
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT DISTINCT thread_id")) {
+        return { rows: mirror.length ? [{ thread_id: "t1" }] : [] };
+      }
+      if (sql.includes("FROM gmail_messages_raw m")) return { rows: mirror };
+      if (sql.includes("google_account_email")) return { rows: [{ email: OWNER }] };
+      return { rows: [] };
+    });
+    mockListOrgGoogleAccounts.mockResolvedValue([caughtUp]);
+  });
+
+  it("returns a message present at Google but not yet mirrored", async () => {
+    mockIngestGmail.mockImplementation(async () => {
+      mirror.push(handAnswer);
+      return { inserted: 1, updated: 0, unchanged: 0 };
+    });
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT, fresh: "true" })
+      .set(idHeaders);
+
+    expect(res.status).toBe(200);
+    const ids = res.body.threads.flatMap((t: { messages: { gmailMessageId: string }[] }) =>
+      t.messages.map((m) => m.gmailMessageId)
+    );
+    expect(ids).toContain("m-hand");
+    // The delta ran on the caller's org mailbox only.
+    expect(mockListOrgGoogleAccounts).toHaveBeenCalledWith(TEST_ORG_ID);
+    expect(mockIngestGmail).toHaveBeenCalledTimes(1);
+    expect(mockIngestGmail.mock.calls[0][0]).toMatchObject({ id: TEST_ACCOUNT_UUID, orgId: TEST_ORG_ID });
+  });
+
+  it("answers 502 (never the stale mirror) when the refresh fails", async () => {
+    mirror.push({ ...handAnswer, gmail_message_id: "m-old" });
+    mockIngestGmail.mockRejectedValue(new Error("Gmail 500"));
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT, fresh: "true" })
+      .set(idHeaders);
+
+    expect(res.status).toBe(502);
+    expect(res.body.reason).toBe("gmail_refresh_failed");
+    expect(res.body.threads).toBeUndefined();
+  });
+
+  it("answers 502 when a mailbox has not finished its first sync (never backfills from a read)", async () => {
+    mockListOrgGoogleAccounts.mockResolvedValue([{ ...caughtUp, gmailHistoryId: null }]);
+
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT, fresh: "true" })
+      .set(idHeaders);
+
+    expect(res.status).toBe(502);
+    expect(res.body.reason).toBe("gmail_mirror_not_caught_up");
+    expect(mockIngestGmail).not.toHaveBeenCalled();
+  });
+
+  it("does not call Google without fresh (unchanged read)", async () => {
+    mirror.push(handAnswer);
+    for (const fresh of [undefined, "false"]) {
+      const res = await request(app)
+        .get("/orgs/google/conversation")
+        .query(fresh ? { email: PROSPECT, fresh } : { email: PROSPECT })
+        .set(idHeaders);
+      expect(res.status).toBe(200);
+    }
+    expect(mockListOrgGoogleAccounts).not.toHaveBeenCalled();
+    expect(mockIngestGmail).not.toHaveBeenCalled();
+  });
+
+  it("rejects a fresh value that is not true/false", async () => {
+    const res = await request(app)
+      .get("/orgs/google/conversation")
+      .query({ email: PROSPECT, fresh: "yes" })
+      .set(idHeaders);
+    expect(res.status).toBe(400);
+  });
+});
+
 // ─── GET /internal/staff-mailboxes/conversation ───
 
 describe("GET /internal/staff-mailboxes/conversation", () => {
