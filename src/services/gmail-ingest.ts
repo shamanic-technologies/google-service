@@ -26,7 +26,7 @@ export interface GmailIngestResult {
   unchanged: number;
 }
 
-const upsertMessage = async (
+export const upsertMessage = async (
   orgId: string,
   googleAccountId: string,
   message: { id: string; threadId: string; historyId: string; payload: unknown }

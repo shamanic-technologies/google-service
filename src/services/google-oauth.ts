@@ -3,8 +3,15 @@ import crypto from "crypto";
 const GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+// Send permission: lets a follow-up reply in the person's own Gmail thread from
+// the address they wrote to (RIGHT-MOMENT-OR-LATER-1014). A grant made before it
+// was requested lacks it, and the reply route refuses with
+// `google_send_permission_missing` until the owner reconnects.
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
 export const GOOGLE_CRM_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
+  GMAIL_SEND_SCOPE,
   "https://www.googleapis.com/auth/contacts.readonly",
   "https://www.googleapis.com/auth/contacts.other.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
