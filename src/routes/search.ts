@@ -44,12 +44,36 @@ const authorizeBilling = async (
     req.audienceId
   );
   if (!result.sufficient) {
+    if (result.reason) {
+      // A sales funnel campaign's MAX BUDGET refused it, not the balance: name
+      // that cause and pass billing's reason + cap through verbatim, so nobody
+      // tells the client to add credit (fleet wording: chat-service).
+      const error =
+        SALES_FUNNEL_REFUSAL_ERROR[result.reason] ?? "Sales funnel max budget reached";
+      throw Object.assign(new Error(error), {
+        statusCode: 402,
+        body: {
+          error,
+          reason: result.reason,
+          ...(result.sales_funnel_cap ? { sales_funnel_cap: result.sales_funnel_cap } : {}),
+          balance_cents: result.balance_cents,
+          required_cents: result.required_cents,
+        },
+      });
+    }
     throw Object.assign(
       new Error(`Insufficient credits: need ${result.required_cents}¢, have ${result.balance_cents}¢`),
       { statusCode: 402 }
     );
   }
 };
+
+const SALES_FUNNEL_REFUSAL_ERROR: Record<string, string> = {
+  sales_funnel_max_budget_reached: "Sales funnel max budget reached",
+  sales_funnel_max_budget_unreadable: "Sales funnel max budget unreadable",
+};
+
+type RouteError = Error & { statusCode?: number; body?: Record<string, unknown> };
 
 const reportCosts = (
   req: Request,
@@ -94,11 +118,11 @@ router.post(
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/web error:`, err);
-      const error = err as Error & { statusCode?: number };
+      const error = err as RouteError;
       if (req.runId) {
         traceEvent(req.runId, { service: "google-service", event: "search-web-error", detail: error.message, level: "error" }, req.headers).catch(() => {});
       }
-      res.status(error.statusCode ?? 502).json({ error: error.message });
+      res.status(error.statusCode ?? 502).json(error.body ?? { error: error.message });
     }
   }
 );
@@ -127,11 +151,11 @@ router.post(
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/news error:`, err);
-      const error = err as Error & { statusCode?: number };
+      const error = err as RouteError;
       if (req.runId) {
         traceEvent(req.runId, { service: "google-service", event: "search-news-error", detail: error.message, level: "error" }, req.headers).catch(() => {});
       }
-      res.status(error.statusCode ?? 502).json({ error: error.message });
+      res.status(error.statusCode ?? 502).json(error.body ?? { error: error.message });
     }
   }
 );
@@ -171,11 +195,11 @@ router.post(
       res.json({ results });
     } catch (err) {
       console.error(`[google-service] /search/batch error:`, err);
-      const error = err as Error & { statusCode?: number };
+      const error = err as RouteError;
       if (req.runId) {
         traceEvent(req.runId, { service: "google-service", event: "search-batch-error", detail: error.message, level: "error" }, req.headers).catch(() => {});
       }
-      res.status(error.statusCode ?? 502).json({ error: error.message });
+      res.status(error.statusCode ?? 502).json(error.body ?? { error: error.message });
     }
   }
 );

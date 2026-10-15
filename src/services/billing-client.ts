@@ -6,10 +6,25 @@ export interface AuthorizeCreditItem {
   quantity: number;
 }
 
+export interface SalesFunnelCap {
+  salesFunnelId: string;
+  salesFunnelCampaignId: string;
+  amountCents: number | string;
+  period: string;
+  consumedCents: number | string;
+  reservedCents: number | string;
+}
+
 export interface AuthorizeCreditsResult {
   sufficient: boolean;
   balance_cents: number;
   required_cents: number;
+  /**
+   * Present ONLY when billing refused because a sales funnel campaign's MAX
+   * BUDGET is reached (or unreadable); absent on a real balance shortfall.
+   */
+  reason?: string;
+  sales_funnel_cap?: SalesFunnelCap;
 }
 
 export const authorizeCredits = async (
