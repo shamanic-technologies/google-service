@@ -1219,7 +1219,63 @@ describe("POST /search/web", () => {
       .set(idHeaders)
       .send({ query: "test" });
     expect(res.status).toBe(402);
-    expect(res.body.error).toContain("Insufficient credits");
+    expect(res.body).toEqual({ error: "Insufficient credits: need 100¢, have 5¢" });
+  });
+
+  it("returns 402 naming the sales funnel max budget, with billing's reason + sales_funnel_cap verbatim", async () => {
+    const cap = {
+      salesFunnelId: "sf-1",
+      salesFunnelCampaignId: "sfc-1",
+      amountCents: 5000,
+      period: "monthly",
+      consumedCents: 5000,
+      reservedCents: 0,
+    };
+    mockAuthorizeCredits.mockResolvedValueOnce({
+      sufficient: false,
+      balance_cents: 90000,
+      required_cents: 100,
+      reason: "sales_funnel_max_budget_reached",
+      sales_funnel_cap: cap,
+    });
+
+    const res = await request(app)
+      .post("/search/web")
+      .set(idHeaders)
+      .send({ query: "test" });
+    expect(res.status).toBe(402);
+    expect(res.body.error).toBe("Sales funnel max budget reached");
+    expect(res.body.error).not.toMatch(/insufficient/i);
+    expect(res.body.reason).toBe("sales_funnel_max_budget_reached");
+    expect(res.body.sales_funnel_cap).toEqual(cap);
+    expect(mockSearchWeb).not.toHaveBeenCalled();
+  });
+
+  it("/search/batch: a sales funnel max budget refusal carries reason + sales_funnel_cap", async () => {
+    const cap = {
+      salesFunnelId: "sf-1",
+      salesFunnelCampaignId: "sfc-1",
+      amountCents: 5000,
+      period: "monthly",
+      consumedCents: 4999,
+      reservedCents: 0,
+    };
+    mockAuthorizeCredits.mockResolvedValueOnce({
+      sufficient: false,
+      balance_cents: 90000,
+      required_cents: 200,
+      reason: "sales_funnel_max_budget_unreadable",
+      sales_funnel_cap: cap,
+    });
+
+    const res = await request(app)
+      .post("/search/batch")
+      .set(idHeaders)
+      .send({ queries: [{ query: "a", type: "web" }, { query: "b", type: "news" }] });
+    expect(res.status).toBe(402);
+    expect(res.body.error).toBe("Sales funnel max budget unreadable");
+    expect(res.body.reason).toBe("sales_funnel_max_budget_unreadable");
+    expect(res.body.sales_funnel_cap).toEqual(cap);
   });
 
   it("passes optional params to serper", async () => {
