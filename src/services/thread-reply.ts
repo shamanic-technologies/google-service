@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { NOT_EXCHANGED_LABELS } from "../lib/exchanged-mail";
 import { query } from "../db/client";
 import {
   GoogleApiError,
@@ -52,8 +53,6 @@ export type LatestThreadResult =
   | { found: true; thread: LatestThread }
   | { found: false; reason: "no_google_account_connected" | "no_messages" };
 
-// Labels that mean "not an exchange": never answer into them.
-const EXCLUDED_LABELS = ["DRAFT", "SPAM", "TRASH"];
 // Messages read per lookup, newest first. A person's whole history with one
 // org is far below this; the newest threads are the ones that matter.
 const MESSAGE_SCAN_LIMIT = 300;
@@ -165,7 +164,7 @@ const findThreads = async (
         AND NOT (s.labels ?| $4::text[])
       ORDER BY s.sent_at DESC NULLS LAST, s.gmail_message_id DESC
       LIMIT $5`,
-    [orgId, person, onlyThreadId ?? null, EXCLUDED_LABELS, MESSAGE_SCAN_LIMIT]
+    [orgId, person, onlyThreadId ?? null, [...NOT_EXCHANGED_LABELS], MESSAGE_SCAN_LIMIT]
   );
   const messages = rows.rows as unknown as ThreadMessageRow[];
   if (messages.length === 0) return { connected: true, candidates: [] };

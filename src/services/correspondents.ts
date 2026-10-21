@@ -1,4 +1,5 @@
 import { query } from "../db/client";
+import { exchangedOnly } from "../lib/exchanged-mail";
 import { resolveOwnerAddresses } from "./owner-addresses";
 
 // Who has this org's connected mailbox been IN CONVERSATION with?
@@ -82,6 +83,7 @@ export const listCorrespondents = async (
           ) r
          WHERE s.org_id = $1
            AND lower(s.from_email) = ANY($2::text[])
+           AND ${exchangedOnly("s")}
            AND r.addr <> ''
            AND NOT (r.addr = ANY($2::text[]))
       ),
@@ -189,6 +191,7 @@ const countCorrespondents = async (
           FROM gmail_messages_silver s
           CROSS JOIN LATERAL jsonb_array_elements_text(s.to_emails || s.cc_emails) AS x
          WHERE s.org_id = $1 AND lower(s.from_email) = ANY($2::text[])
+           AND ${exchangedOnly("s")}
       )
       SELECT count(*)::int AS total,
              count(*) FILTER (WHERE EXISTS (

@@ -1,4 +1,5 @@
 import { query } from "../db/client";
+import { exchangedOnly } from "../lib/exchanged-mail";
 import { resolveOwnerAddresses } from "./owner-addresses";
 import {
   AddressedMessagesInputError,
@@ -105,6 +106,7 @@ export const getOrgAddressedMessages = async (
          FROM gmail_messages_silver s
         WHERE s.org_id = $1
           AND (s.from_email = ANY($2::text[]) OR s.to_emails ?| $2::text[] OR s.cc_emails ?| $2::text[])
+          AND ${exchangedOnly("s")}
           AND ($3::uuid IS NULL OR s.id > $3::uuid)
           AND ($4::timestamptz IS NULL OR s.sent_at >= $4::timestamptz)
           AND ($5::timestamptz IS NULL OR s.sent_at < $5::timestamptz)
