@@ -17,6 +17,24 @@ export const GOOGLE_CRM_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+// Google Calendar connection (GOOGLE-CALENDAR-INTEGRATION-1021): asked on its own
+// consent, never bundled into the Gmail one. Events read-only = who booked a
+// meeting with the owner, whatever tool created it. Meet read-only = the
+// participant list of a Meet call, the only positive proof a prospect joined.
+export const CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
+export const MEET_READ_SCOPE = "https://www.googleapis.com/auth/meetings.space.readonly";
+
+export const GOOGLE_CALENDAR_SCOPES = [
+  CALENDAR_EVENTS_SCOPE,
+  MEET_READ_SCOPE,
+  "https://www.googleapis.com/auth/userinfo.email",
+];
+
+export type GoogleConnection = "mailbox" | "calendar";
+
+export const scopesForConnection = (connection: GoogleConnection): string[] =>
+  connection === "calendar" ? GOOGLE_CALENDAR_SCOPES : GOOGLE_CRM_SCOPES;
+
 export interface PkcePair {
   verifier: string;
   challenge: string;
@@ -38,6 +56,8 @@ export interface BuildAuthorizeUrlParams {
   redirectUri: string;
   state: string;
   pkceChallenge: string;
+  // Which consent to ask for. Default = the mailbox (Gmail + contacts) one.
+  connection?: GoogleConnection;
 }
 
 export const buildAuthorizeUrl = (params: BuildAuthorizeUrlParams): string => {
@@ -45,7 +65,7 @@ export const buildAuthorizeUrl = (params: BuildAuthorizeUrlParams): string => {
     client_id: params.clientId,
     redirect_uri: params.redirectUri,
     response_type: "code",
-    scope: GOOGLE_CRM_SCOPES.join(" "),
+    scope: scopesForConnection(params.connection ?? "mailbox").join(" "),
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",

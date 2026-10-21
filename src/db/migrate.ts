@@ -328,6 +328,66 @@ CREATE TABLE IF NOT EXISTS gmail_message_clean_bodies (
   FOREIGN KEY (org_id, gmail_message_id)
     REFERENCES gmail_messages_raw(org_id, gmail_message_id) ON DELETE CASCADE
 );
+
+-- ─── Google Calendar connection (GOOGLE-CALENDAR-INTEGRATION-1021) ───
+-- A calendar is connected on its OWN consent (never bundled with Gmail), so the
+-- pending OAuth row remembers which connection it started. Existing rows and
+-- callers that send nothing stay 'mailbox'.
+ALTER TABLE google_oauth_pending ADD COLUMN IF NOT EXISTS connection TEXT NOT NULL DEFAULT 'mailbox';
+
+-- One row per (org, Google account) whose primary calendar we read. Separate from
+-- google_oauth_tokens on purpose: every mailbox query (sync, fresh pass, owner
+-- addresses, staff reads) picks rows from that table, and a calendar-only grant
+-- has no Gmail to read.
+CREATE TABLE IF NOT EXISTS google_calendar_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  google_account_email TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  access_token TEXT,
+  access_token_expires_at TIMESTAMPTZ,
+  scopes TEXT NOT NULL,
+  last_synced_at TIMESTAMPTZ,
+  last_sync_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, google_account_email)
+);
+CREATE INDEX IF NOT EXISTS idx_google_calendar_accounts_org ON google_calendar_accounts(org_id);
+
+-- Bronze payload + the typed fields consumers read, parsed at ingest. Keyed on
+-- Google's own event id per connected calendar. changed_at moves ONLY when a
+-- served field changed (new event, Google edit, Meet attendance read), so
+-- (changed_at, id) is the keyset of the changes feed consumers poll.
+CREATE TABLE IF NOT EXISTS google_calendar_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  calendar_account_id UUID NOT NULL REFERENCES google_calendar_accounts(id) ON DELETE CASCADE,
+  google_event_id TEXT NOT NULL,
+  etag TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL,
+  summary TEXT,
+  start_at TIMESTAMPTZ,
+  end_at TIMESTAMPTZ,
+  google_created_at TIMESTAMPTZ,
+  google_updated_at TIMESTAMPTZ,
+  organizer_email TEXT,
+  attendees JSONB NOT NULL DEFAULT '[]'::jsonb,
+  meet_code TEXT,
+  meet_status TEXT NOT NULL DEFAULT 'not_meet'
+    CHECK (meet_status IN ('not_meet', 'pending', 'record_found', 'no_record', 'unavailable')),
+  meet_participants JSONB NOT NULL DEFAULT '[]'::jsonb,
+  meet_error TEXT,
+  meet_checked_at TIMESTAMPTZ,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(calendar_account_id, google_event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_google_calendar_events_changed ON google_calendar_events(changed_at, id);
+CREATE INDEX IF NOT EXISTS idx_google_calendar_events_meet_due
+  ON google_calendar_events(end_at) WHERE meet_status = 'pending';
 `;
 
 export const runMigrations = async (): Promise<void> => {
