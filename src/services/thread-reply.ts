@@ -275,10 +275,14 @@ export const replySubject = (subject: string | null): string => {
 const encodeHeader = (v: string): string =>
   /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${Buffer.from(v, "utf-8").toString("base64")}?=`;
 
-const htmlToText = (html: string): string =>
+// Plain-text alternative of the reply. A paragraph end is a BLANK line (what
+// every mail client shows between <p>s); a <br> or a div/li end stays a single
+// line break (GMAIL-PARAGRAPHS-1021: paragraphs were glued in text views).
+export const htmlToText = (html: string): string =>
   html
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<\/(p|h[1-6])>/gi, "\n\n")
+    .replace(/<\/(div|li)>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -286,6 +290,7 @@ const htmlToText = (html: string): string =>
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
