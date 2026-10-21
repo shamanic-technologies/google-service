@@ -3,6 +3,7 @@ import { env } from "../env";
 import { syncOrg } from "./sync";
 import { ingestGmailForAccount } from "./gmail-ingest";
 import { listGmailDeltaAccounts } from "./google-tokens";
+import { listAllCalendarAccounts, syncCalendarAccount } from "./calendar";
 import type { CallerContext } from "./key-service";
 
 const CRON_CALLER: CallerContext = { method: "CRON", path: "/cron/auto-sync" };
@@ -87,6 +88,48 @@ export const startGmailFreshSync = (): void => {
       void runGmailFreshOnce()
         .catch((err) =>
           console.error(`[google-service] gmail-fresh tick failed: ${(err as Error).message}`)
+        )
+        .finally(() => schedule(intervalMs));
+    }, delayMs);
+    timer.unref();
+  };
+  schedule(FRESH_FIRST_TICK_MS);
+};
+
+const CALENDAR_CALLER: CallerContext = { method: "CRON", path: "/cron/calendar-sync" };
+
+// One pass over every connected Google Calendar. Each calendar is isolated: one
+// failure (stored on its row as last_sync_error) does not skip the rest.
+export const runCalendarSyncOnce = async (): Promise<void> => {
+  const accounts = await listAllCalendarAccounts();
+  for (const account of accounts) {
+    try {
+      const s = await syncCalendarAccount(account, CALENDAR_CALLER);
+      if (s.inserted + s.updated + s.meetFound > 0) {
+        console.log(
+          `[google-service] calendar-sync org=${account.orgId} account=${account.id}: ` +
+            `+${s.inserted}/${s.updated} meet ${s.meetFound}/${s.meetChecked}`
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[google-service] calendar-sync failed for org=${account.orgId} account=${account.id}: ${(err as Error).message}`
+      );
+    }
+  }
+};
+
+// Same cadence model as the Gmail fresh pass: first tick ~60s after boot, then
+// one interval after the previous pass FINISHED (chained, never overlapping).
+export const startCalendarSync = (): void => {
+  const minutes = env.GOOGLE_CALENDAR_SYNC_INTERVAL_MINUTES;
+  const intervalMs = Math.round(minutes * 60 * 1000);
+  console.log(`[google-service] calendar-sync scheduled every ${minutes}min`);
+  const schedule = (delayMs: number) => {
+    const timer = setTimeout(() => {
+      void runCalendarSyncOnce()
+        .catch((err) =>
+          console.error(`[google-service] calendar-sync tick failed: ${(err as Error).message}`)
         )
         .finally(() => schedule(intervalMs));
     }, delayMs);

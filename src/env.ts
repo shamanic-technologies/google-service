@@ -23,6 +23,9 @@ const envSchema = z.object({
   // is already caught up. Keeps the mirror ~15 min fresh so an answer one of our
   // people sends from Gmail clears "Needs your call" quickly (owner 2026-10-12).
   GOOGLE_GMAIL_FRESH_INTERVAL_MINUTES: z.coerce.number().min(1).default(15),
+  // Interval (minutes) between passes over every connected Google Calendar
+  // (events of the window + Meet attendance of ended calls).
+  GOOGLE_CALENDAR_SYNC_INTERVAL_MINUTES: z.coerce.number().min(1).default(15),
   // Interval (hours) between Google Ads spend ingestion passes. Deliberately on
   // its OWN schedule, never chained to campaign create/update: Google publishes
   // a day's spend well after the fact, so a read that follows a write in the

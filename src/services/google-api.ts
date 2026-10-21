@@ -73,7 +73,7 @@ export const PEOPLE_PERSON_FIELDS = [
   "occupations",
 ].join(",");
 
-const apiFetch = async <T>(url: string, accessToken: string): Promise<T> => {
+export const apiFetch = async <T>(url: string, accessToken: string): Promise<T> => {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
