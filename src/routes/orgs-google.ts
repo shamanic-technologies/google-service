@@ -28,8 +28,14 @@ import {
   generateState,
   GOOGLE_CRM_SCOPES,
   revokeGoogleToken,
+  type GoogleConnection,
   type RevokeOutcome,
 } from "../services/google-oauth";
+import {
+  hasCalendarEventsScope,
+  syncCalendarInBackground,
+  upsertCalendarAccount,
+} from "../services/calendar";
 import { schedulePurge } from "../services/account-purge";
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
@@ -60,7 +66,8 @@ router.post(
     try {
       const orgId = req.orgId!;
       const userId = req.userId!;
-      const body = req.validatedBody as { redirectUri?: string };
+      const body = req.validatedBody as { redirectUri?: string; connection?: GoogleConnection };
+      const connection: GoogleConnection = body.connection ?? "mailbox";
       const redirectUri = body.redirectUri ?? env.GOOGLE_OAUTH_REDIRECT_URI;
       if (!redirectUri) {
         res.status(500).json({
@@ -72,7 +79,7 @@ router.post(
 
       traceEvent(
         req.runId!,
-        { service: "google-service", event: "google-crm-auth-start", detail: `orgId=${orgId}` },
+        { service: "google-service", event: "google-crm-auth-start", detail: `orgId=${orgId} connection=${connection}` },
         req.headers
       ).catch(() => {});
 
@@ -82,9 +89,9 @@ router.post(
 
       await query(
         `INSERT INTO google_oauth_pending
-            (org_id, user_id, state, pkce_verifier, redirect_uri, feature_slug, brand_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [orgId, userId, state, verifier, redirectUri, req.featureSlug ?? null, req.brandId ?? null]
+            (org_id, user_id, state, pkce_verifier, redirect_uri, feature_slug, brand_id, connection)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [orgId, userId, state, verifier, redirectUri, req.featureSlug ?? null, req.brandId ?? null, connection]
       );
 
       const url = buildAuthorizeUrl({
@@ -92,6 +99,7 @@ router.post(
         redirectUri,
         state,
         pkceChallenge: challenge,
+        connection,
       });
 
       res.json({ url, state });
@@ -113,7 +121,7 @@ router.get(
       const { code, state } = req.validatedQuery as { code: string; state: string };
 
       const pendingResult = await query(
-        `SELECT pkce_verifier, redirect_uri, feature_slug, brand_id
+        `SELECT pkce_verifier, redirect_uri, feature_slug, brand_id, connection
            FROM google_oauth_pending
            WHERE org_id = $1 AND state = $2 AND expires_at > NOW()`,
         [orgId, state]
@@ -129,6 +137,7 @@ router.get(
         redirect_uri: string;
         feature_slug: string | null;
         brand_id: string | null;
+        connection: GoogleConnection;
       };
 
       await query(
@@ -147,6 +156,45 @@ router.get(
 
       const email = await fetchGoogleUserEmail(tokens.access_token);
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+
+      // A calendar connection (its own consent) lands in its own table: it is
+      // never a mailbox, so no Gmail sync runs for it.
+      if (pending.connection === "calendar") {
+        const grantedScopes = tokens.scope ?? "";
+        // Google's consent lets the person untick the calendar box: without it
+        // there is nothing to read, so say so instead of storing a dead connection.
+        if (!hasCalendarEventsScope(grantedScopes)) {
+          res.status(400).json({
+            error:
+              "Google did not grant calendar access. Connect again and keep the calendar permission ticked.",
+            reason: "calendar_permission_missing",
+          });
+          return;
+        }
+        const calendar = await upsertCalendarAccount({
+          orgId,
+          userId,
+          googleAccountEmail: email,
+          refreshToken: tokens.refresh_token,
+          accessToken: tokens.access_token,
+          accessTokenExpiresAt: expiresAt,
+          scopes: grantedScopes,
+        });
+        syncCalendarInBackground(calendar, callerCtx(req));
+        traceEvent(
+          req.runId!,
+          { service: "google-service", event: "google-calendar-connected", detail: `email=${email}` },
+          req.headers
+        ).catch(() => {});
+        res.json({
+          success: true,
+          connection: "calendar",
+          googleAccountId: calendar.id,
+          googleAccountEmail: calendar.googleAccountEmail,
+          syncJobId: null,
+        });
+        return;
+      }
 
       const stored = await upsertGoogleToken({
         orgId,
@@ -180,6 +228,7 @@ router.get(
 
       res.json({
         success: true,
+        connection: "mailbox",
         googleAccountId: stored.id,
         googleAccountEmail: stored.googleAccountEmail,
         syncJobId,

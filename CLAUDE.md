@@ -86,6 +86,9 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `POST` | `/internal/staff-mailboxes/addressed-messages` | Internal. Staff-mirrored mail sent TO/FROM given sending addresses/domains, keyset-paged. See "Staff mail to/from our SENDING mailboxes". |
 | `GET` | `/orgs/google/threads/latest` | The Gmail thread holding a person's latest exchange + the owner address that answers it. Mirror read. See "Reply in the person's thread". |
 | `POST` | `/orgs/google/thread-replies` | Send ONE reply in that thread from that address (Gmail API). See "Reply in the person's thread". |
+| `GET` | `/orgs/google/calendar/accounts` | The org's connected Google Calendars + health. See "Google Calendar". |
+| `DELETE` | `/orgs/google/calendar/accounts/{email}` | Disconnect one calendar. See "Google Calendar". |
+| `GET` | `/internal/calendar/events` | Internal changes feed of calendar events (booked meetings + Meet attendance), cross-org. |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Disconnect (`DELETE /orgs/google/accounts/{email}`)
@@ -159,6 +162,18 @@ Staff operate client brands as the agency and answer prospects by hand from thei
 - **The send**: Gmail `messages.send` with `threadId`, From `fromAddress` (checked against Gmail `settings/sendAs` first: Gmail would otherwise silently rewrite From → 422 `from_address_not_send_as`), `Re: <subject>`, In-Reply-To = newest message's Message-ID, References = its References + that id. The sent message is then upserted into the mirror (`upsertMessage`); a failed record after the send is logged, never an error (the email left).
 - **Permission**: `gmail.send` is in `GOOGLE_CRM_SCOPES` since this change. A grant without it (every mailbox connected before) refuses 403 `google_send_permission_missing` with the sentence "the org owner must reconnect Google and grant send access"; Google's own insufficient-scope 403 maps to the same code. Never a fallback to another transport here.
 - No metered platform cost (the account's own OAuth grant), so no cost declaration. Not idempotent: the gateway dedupes on its key.
+
+### Google Calendar: booked meetings + Meet attendance (GOOGLE-CALENDAR-INTEGRATION-1021)
+
+`src/services/calendar.ts`, `src/routes/calendar.ts`. Why: clients book through their own scheduling link (neocal, Calendly, by hand), so nothing told us a meeting was booked outside our AI booking, nor whether it was held.
+- **Its own consent**: `POST /orgs/google/auth/start` body `connection: "calendar"` asks `calendar.events.readonly` + `meetings.space.readonly` only (never bundled with Gmail); the SAME `/auth/callback` (same registered redirect URI) reads `google_oauth_pending.connection` and stores the grant in `google_calendar_accounts`, NEVER `google_oauth_tokens` (every mailbox query picks from there). Calendar box unticked → 400 `calendar_permission_missing`. Callback answers `connection` + `syncJobId: null` for a calendar.
+- **Read**: primary calendar, window 30 d back / 180 d ahead, `singleEvents` + `showDeleted`, every `GOOGLE_CALENDAR_SYNC_INTERVAL_MINUTES` (15; first tick ~60 s after boot, chained) + once right after connect. `google_calendar_events` = bronze payload + typed fields parsed at ingest; a row is rewritten only when its etag moved, and `changed_at` moves only then (or on a Meet read).
+- **Attendance = ONLY the Meet participant list** (owner 2026-10-21 « A pour now, pour rester simple »): an ended Meet event is `pending` until Meet publishes a conference record (`record_found` + participants: displayName, kind, joined/left; Meet gives NO email), `no_record` 24 h after its end (unknown, never "nobody came"), `unavailable` on a Google 400/403 or a grant without the Meet scope. Not a Meet call = `not_meet` (unknown). A reschedule (end or meet code changed) resets it to pending.
+- **Who is which lead is NOT decided here**: attendees and participants are served raw; the consumer (crm-service) judges the match with Jev (people book from another address; owner 2026-10-21).
+- **Feed**: `GET /internal/calendar/events?cursor=` cross-org, keyset `(changed_at, id)`, `hasMore`; a changed event comes back again.
+- **Disconnect** `DELETE /orgs/google/calendar/accounts/{email}`: deletes the calendar + its events (cascade, small). Revokes at Google UNLESS the same address is a connected mailbox in any org (`grant: kept_for_mailbox`): a revoke kills every token of the grant. Conversely a mailbox disconnect revokes the shared grant and the calendar then lists `sync_failing` (reconnect).
+- No metered platform cost (the user's own OAuth token, free Google quotas).
+- **Platform prerequisite**: the Google Calendar API and Google Meet REST API enabled on the OAuth client's Cloud project, both scopes on its consent screen (sensitive scopes: Google verification).
 
 ### Idempotency strategy: upsert-when-different
 

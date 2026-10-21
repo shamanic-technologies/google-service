@@ -317,6 +317,9 @@ const spec = {
       GoogleAuthStartBody: toSchema(schemas.GoogleAuthStartBodySchema),
       GoogleAuthStartResponse: toSchema(schemas.GoogleAuthStartResponseSchema),
       GoogleAuthCallbackResponse: toSchema(schemas.GoogleAuthCallbackResponseSchema),
+      GoogleCalendarAccountsResponse: toSchema(schemas.GoogleCalendarAccountsResponseSchema),
+      GoogleCalendarDisconnectResponse: toSchema(schemas.GoogleCalendarDisconnectResponseSchema),
+      CalendarEventChangesResponse: toSchema(schemas.CalendarEventChangesResponseSchema),
       GoogleSyncSummary: toSchema(schemas.GoogleSyncSummarySchema),
       GoogleSyncStartResponse: toSchema(schemas.GoogleSyncStartResponseSchema),
       GoogleSyncJobResponse: toSchema(schemas.GoogleSyncJobResponseSchema),
@@ -952,9 +955,9 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
     },
     "/orgs/google/auth/start": {
       post: {
-        summary: "Start Google CRM OAuth (Gmail + People readonly)",
+        summary: "Start a Google connection (mailbox by default, or calendar)",
         description:
-          "Generates a Google authorize URL with PKCE for the Gmail readonly + Contacts readonly scopes. Persists state + verifier in google_oauth_pending (10 minute TTL).",
+          "Generates a Google authorize URL with PKCE and persists state + verifier in google_oauth_pending (10 minute TTL). connection=mailbox (default) asks Gmail read + send and Contacts read; connection=calendar asks, on its own consent, Calendar events read + Google Meet read (attendance). The same /auth/callback finishes both and answers which connection it stored.",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
@@ -1215,6 +1218,81 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
             description: "No staff mailbox mirrored, or no staff exchange with this address",
             content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleStaffConversationNotFound" } } },
           },
+        },
+      },
+    },
+    "/orgs/google/calendar/accounts": {
+      get: {
+        summary: "List the org's connected Google Calendars",
+        description:
+          "Each Google Calendar this org connected (POST /orgs/google/auth/start with connection=calendar, its own consent, never bundled with Gmail) and its health: status=sync_failing when the last read failed (lastSyncError says why, e.g. the grant was removed at Google: reconnect); attendance=meet when Google Meet participant lists can be read, meet_permission_missing when that permission was not granted (attendance stays unknown). Calendars are read every ~15 min.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        responses: {
+          "200": {
+            description: "Connected calendars",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleCalendarAccountsResponse" } } },
+          },
+        },
+      },
+    },
+    "/orgs/google/calendar/accounts/{email}": {
+      delete: {
+        summary: "Disconnect one Google Calendar",
+        description:
+          "Stops reading the calendar and deletes every event mirrored from it. The Google grant is revoked, EXCEPT when the same Google account is also connected as a mailbox (grant=kept_for_mailbox): a revoke would cut the mailbox too. A Google revoke failure answers 502 reason=google_revoke_failed and keeps the calendar connected (retry). 404 reason=calendar_not_found.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          {
+            name: "email",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "email" },
+            description: "The connected calendar's Google account email (URL-encoded). Matched case-insensitively.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Disconnected",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleCalendarDisconnectResponse" } } },
+          },
+          "404": { description: "No such calendar connected for this org (reason=calendar_not_found)" },
+          "502": { description: "Google did not confirm the revoke (reason=google_revoke_failed). Still connected; retry." },
+        },
+      },
+    },
+    "/internal/calendar/events": {
+      get: {
+        summary: "Changes feed of Google Calendar events across every org (booked meetings + Meet attendance)",
+        description:
+          "Internal, service-to-service. Every event of every connected Google Calendar (primary calendar, window 30 days back to 180 days ahead) whose served fields changed after the cursor, oldest change first: a new booking, a reschedule, a cancellation (status=cancelled), or Meet attendance read. An event that changes again comes back again. Each event carries orgId, the calendar's Google account, Google's own status, title, start/end, bookedAt (when the event was created at Google), organizer, attendees (email lower-cased, displayName, responseStatus, organizer, self) and meet: status not_meet (not a Google Meet call: attendance unknown), pending (not ended, or ended and no Meet record yet), record_found (participants = who joined, displayName + kind signed_in|anonymous|phone + joinedAt/leftAt; Meet gives no email), no_record (no Meet record 24h after the end: unknown, NOT 'nobody came'), unavailable (Google refused the Meet read, error says why). Which attendee or participant is which lead is the consumer's judgment: people book from another address. Paging: keep nextCursor and send it back; hasMore=true means ask again now, false means wait for the next poll (calendars are read every ~15 min). No cursor = from the beginning. 400 on a bad cursor.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "cursor", in: "query", required: false, schema: { type: "string" }, description: "nextCursor of the previous page" },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500, default: 200 } },
+        ],
+        responses: {
+          "200": {
+            description: "One page of changed events",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CalendarEventChangesResponse" } } },
+          },
+          "400": { description: "Invalid cursor" },
         },
       },
     },

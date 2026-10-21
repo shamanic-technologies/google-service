@@ -515,8 +515,13 @@ export const BatchSearchResponseSchema = z.object({
 
 // ─── Google CRM (Gmail + People bronze) ───
 
+export const GoogleConnectionSchema = z.enum(["mailbox", "calendar"]);
+
 export const GoogleAuthStartBodySchema = z.object({
   redirectUri: z.string().url().optional(),
+  // Which consent to ask for: the mailbox (Gmail + contacts, default) or the
+  // calendar (events + Meet attendance, read-only). Never both in one consent.
+  connection: GoogleConnectionSchema.optional(),
 });
 
 export const GoogleAuthStartResponseSchema = z.object({
@@ -531,10 +536,14 @@ export const GoogleAuthCallbackQuerySchema = z.object({
 
 export const GoogleAuthCallbackResponseSchema = z.object({
   success: z.boolean(),
+  // Which connection the round trip finished (the one asked at /auth/start).
+  connection: GoogleConnectionSchema,
   googleAccountId: z.string().uuid(),
   googleAccountEmail: z.string(),
-  // Id of the sync job started for the org on connect; poll GET /orgs/google/sync/{jobId}.
-  syncJobId: z.string().uuid(),
+  // Id of the sync job started for the org on a MAILBOX connect; poll
+  // GET /orgs/google/sync/{jobId}. Null for a calendar (its first read runs in
+  // the background and shows on GET /orgs/google/calendar/accounts).
+  syncJobId: z.string().uuid().nullable(),
 });
 
 export const GoogleSyncSummarySchema = z.object({
@@ -966,4 +975,87 @@ export const GoogleAccountDisconnectResponseSchema = z.object({
 
 export const ErrorResponseSchema = z.object({
   error: z.string(),
+});
+
+// ─── Google Calendar (GOOGLE-CALENDAR-INTEGRATION-1021) ───
+
+export const GoogleCalendarAccountSchema = z.object({
+  email: z.string(),
+  // sync_failing: the last read failed (lastSyncError says why, e.g. the grant
+  // was removed at Google: reconnect).
+  status: z.enum(["active", "sync_failing"]),
+  // meet: attendance is read from Google Meet participant lists.
+  // meet_permission_missing: the Meet permission was not granted, attendance
+  // stays unknown for this calendar.
+  attendance: z.enum(["meet", "meet_permission_missing"]),
+  connectedAt: z.string(),
+  lastSyncedAt: z.string().nullable(),
+  lastSyncError: z.string().nullable(),
+});
+
+export const GoogleCalendarAccountsResponseSchema = z.object({
+  calendars: z.array(GoogleCalendarAccountSchema),
+});
+
+export const GoogleCalendarDisconnectResponseSchema = z.object({
+  disconnected: z.literal(true),
+  email: z.string(),
+  // kept_for_mailbox: the same Google account is also connected as a mailbox,
+  // and a Google revoke would cut that too, so the grant is left in place.
+  grant: z.enum(["revoked", "already_revoked", "kept_for_mailbox"]),
+});
+
+export const CalendarEventChangesQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+
+export const CalendarEventAttendeeSchema = z.object({
+  email: z.string(),
+  displayName: z.string().nullable(),
+  responseStatus: z.string().nullable(),
+  organizer: z.boolean(),
+  self: z.boolean(),
+});
+
+export const MeetParticipantSchema = z.object({
+  displayName: z.string().nullable(),
+  kind: z.enum(["signed_in", "anonymous", "phone"]),
+  joinedAt: z.string().nullable(),
+  leftAt: z.string().nullable(),
+});
+
+export const CalendarEventSchema = z.object({
+  id: z.string().uuid(),
+  orgId: z.string(),
+  calendarEmail: z.string(),
+  googleEventId: z.string(),
+  // confirmed | tentative | cancelled (Google's own status).
+  status: z.string(),
+  title: z.string().nullable(),
+  startAt: z.string().nullable(),
+  endAt: z.string().nullable(),
+  // When the event was created in Google Calendar (the booking moment).
+  bookedAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+  organizerEmail: z.string().nullable(),
+  attendees: z.array(CalendarEventAttendeeSchema),
+  meet: z.object({
+    // not_meet: not a Google Meet call, attendance unknown.
+    // pending: not ended yet, or ended and Meet has not published its record.
+    // record_found: participants = who joined the call.
+    // no_record: no Meet record 24h after the end (attendance unknown, NOT "nobody came").
+    // unavailable: Google refused the Meet read for this account (error says why).
+    status: z.enum(["not_meet", "pending", "record_found", "no_record", "unavailable"]),
+    participants: z.array(MeetParticipantSchema),
+    error: z.string().nullable(),
+    checkedAt: z.string().nullable(),
+  }),
+  changedAt: z.string(),
+});
+
+export const CalendarEventChangesResponseSchema = z.object({
+  events: z.array(CalendarEventSchema),
+  nextCursor: z.string().nullable(),
+  hasMore: z.boolean(),
 });
