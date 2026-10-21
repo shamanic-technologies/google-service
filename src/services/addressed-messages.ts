@@ -1,4 +1,5 @@
 import { query } from "../db/client";
+import { exchangedOnly } from "../lib/exchanged-mail";
 import type { GmailMessage } from "./google-api";
 import { extractMessageBody, type BodyStatus } from "./message-body";
 import { STAFF_ADDRESSES } from "../lib/staff-mailboxes";
@@ -282,6 +283,7 @@ export const getAddressedMessages = async (
                  WHERE r.addr = ANY($3::text[]) OR split_part(r.addr, '@', 2) = ANY($4::text[])
               )
             )
+        AND ${exchangedOnly("s")}
         AND ($5::uuid IS NULL OR s.id > $5::uuid)
         AND ($6::timestamptz IS NULL OR s.sent_at >= $6::timestamptz)
         AND ($7::timestamptz IS NULL OR s.sent_at < $7::timestamptz)

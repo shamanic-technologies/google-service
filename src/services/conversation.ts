@@ -1,4 +1,5 @@
 import { query } from "../db/client";
+import { exchangedOnly } from "../lib/exchanged-mail";
 import type { GmailMessage } from "./google-api";
 import { extractMessageBody, type BodyStatus } from "./message-body";
 import { cleanBodies, type BodyCleanStatus } from "./body-clean";
@@ -111,10 +112,11 @@ export const getConversation = async (
   // complete without it.
   const matched = await query(
     `SELECT DISTINCT thread_id
-       FROM gmail_messages_silver
+       FROM gmail_messages_silver s
        WHERE org_id = $1
          AND thread_id IS NOT NULL
-         AND (lower(from_email) = $2 OR to_emails ? $2 OR cc_emails ? $2)`,
+         AND (lower(from_email) = $2 OR to_emails ? $2 OR cc_emails ? $2)
+         AND ${exchangedOnly("s")}`,
     [orgId, address]
   );
 
@@ -133,6 +135,7 @@ export const getConversation = async (
        LEFT JOIN gmail_messages_silver s
          ON s.org_id = m.org_id AND s.gmail_message_id = m.gmail_message_id
        WHERE m.org_id = $1 AND m.thread_id = ANY($2::text[])
+         AND ${exchangedOnly("s")}
        ORDER BY COALESCE(s.sent_at, m.fetched_at) DESC, m.gmail_message_id DESC
        LIMIT $3`,
     [orgId, threadIds, limit + 1]
@@ -283,6 +286,7 @@ export const getStaffConversation = async (
                (lower(s.from_email) = ANY($3::text[]) AND (s.to_emails ? $4 OR s.cc_emails ? $4))
             OR (lower(s.from_email) = $4 AND (s.to_emails ?| $3::text[] OR s.cc_emails ?| $3::text[]))
          )
+         AND ${exchangedOnly("s")}
        ORDER BY COALESCE(s.sent_at, m.fetched_at) DESC, m.gmail_message_id DESC
        LIMIT $5`,
     [orgIds, accountIds, staff, address, limit + 1]
