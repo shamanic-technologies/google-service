@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import { exchangedOnly } from "../lib/exchanged-mail";
 import { query } from "../db/client";
 import { env } from "../env";
 import { apiKeyAuth } from "../middleware/api-key-auth";
@@ -562,6 +563,8 @@ router.get(
       if (q.participant) {
         params.push(`%${q.participant}%`);
         conditions.push(`m.payload::text ILIKE $${params.length}`);
+        // One person's thread: only mail really exchanged with them (no draft, spam, trash).
+        conditions.push(exchangedOnly("s"));
       }
       if (cursor) {
         params.push(cursor.ts);

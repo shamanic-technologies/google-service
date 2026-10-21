@@ -55,6 +55,10 @@ Bronze stays the source of truth; silver is a rebuildable view. Contact silver c
   - **Cost**: per mailbox per tick = one `profile` + one `history.list` (+ one `messages.get` per new message) on the user's own OAuth token; ~300 quota units/day per mailbox (profile 1 + history.list 2, x96; +5 per new message) vs Gmail's per-user cap of 250 units per SECOND. No metered platform cost → no cost declaration.
 - Both: take a fresh pool connection per query; never add a timer whose only job is to touch the DB (no keepalives). Google People/Gmail calls use the user's own OAuth token (no metered platform cost). `src/services/sync.ts` `syncOrg` is the shared core of the async HTTP sync job and the full cron.
 
+### Drafts, spam, trash are never served as exchanged mail (GMAIL-DRAFTS-AS-SENT-1022)
+
+The mirror stores every Gmail message, drafts included (a saved draft to a prospect showed as a second "Sent" line in the Unibox). Every read serving a person's mail (conversation org + staff, both addressed reads, `/orgs/google/messages?participant=`, correspondents' outbound side, the reply-thread picker) filters with `exchangedOnly()` / `NOT_EXCHANGED_LABELS` from `src/lib/exchanged-mail.ts`. A new read of that kind must too. Rows stay stored. Correspondents' INBOUND count is left unfiltered on purpose (it must stay index-only). Test: `src/__tests__/exchanged-mail.test.ts` on PGlite.
+
 ### Bronze tables
 
 | Table | Natural key | Source | Notes |
