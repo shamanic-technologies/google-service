@@ -45,6 +45,7 @@ import {
   answeringAddress,
   buildRawReply,
   findLatestThread,
+  htmlToText,
   replyInThread,
   replySubject,
   ReplyRefusal,
@@ -199,6 +200,22 @@ describe("replyInThread", () => {
     expect(mime).toContain("In-Reply-To: <m2@mail.gmail.com>");
     expect(mime).toContain("References: <m1@clientco.test> <m2@mail.gmail.com>");
     expect(mockUpsert).toHaveBeenCalledWith(ORG, ACC, expect.objectContaining({ id: "sent1", threadId: "T1" }));
+  });
+
+  it("separates paragraphs with a blank line in the plain-text part, <br> stays single, html untouched", async () => {
+    mirror(`${READ} ${SEND}`, [msg({ from_email: ALIAS, to_emails: [PERSON] })]);
+    mockQuery.mockResolvedValueOnce({ rows: [{ payload: {} }] });
+    const bodyHtml = "<p>A</p><p>B<br>b2</p><p>C</p>";
+    await replyInThread(ORG, { ...input, bodyHtml }, caller);
+    const [, sendArgs] = mockSend.mock.calls[0] as [string, { raw: string }];
+    const mime = Buffer.from(sendArgs.raw, "base64url").toString("utf-8");
+    const partOf = (type: string): string => {
+      const block = mime.split(/--b_[0-9a-f]+/).find((b) => b.includes(`Content-Type: ${type}`)) ?? "";
+      return Buffer.from(block.split("\r\n\r\n")[1].replace(/\r\n/g, ""), "base64").toString("utf-8");
+    };
+    expect(partOf("text/plain")).toBe("A\n\nB\nb2\n\nC");
+    expect(partOf("text/html")).toBe(bodyHtml);
+    expect(htmlToText("<p>A</p><p>B</p><p>C</p>")).toBe("A\n\nB\n\nC");
   });
 
   it("refuses google_send_permission_missing when the grant lacks gmail.send, nothing sent", async () => {
