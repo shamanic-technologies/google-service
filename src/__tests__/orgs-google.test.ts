@@ -154,6 +154,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Vitest 3+ restoreAllMocks no longer resets vi.fn() state; reset explicitly so
+  // unconsumed mockResolvedValueOnce queues do not leak into the next test (Vitest 2 behavior).
+  vi.resetAllMocks();
   vi.restoreAllMocks();
 });
 
