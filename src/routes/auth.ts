@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { query } from "../db/client";
 import { storeRefreshToken, getGoogleCredentials } from "../services/key-service";
 import {
@@ -24,7 +24,7 @@ router.get(
       const { redirectUri } = req.validatedQuery as { redirectUri?: string };
       const orgId = req.orgId!;
       const userId = req.userId!;
-      const state = uuidv4();
+      const state = randomUUID();
 
       traceEvent(req.runId!, { service: "google-service", event: "auth-url-start", detail: `orgId=${orgId}` }, req.headers).catch(() => {});
 
