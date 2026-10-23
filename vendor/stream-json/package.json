@@ -1,0 +1,11 @@
+{
+  "name": "stream-json",
+  "version": "1.9.1-stub",
+  "description": "Inert stand-in for stream-json. google-ads-api requires it at load time for its report-streaming helpers (reportStream / reportStreamRaw), which this service never calls. Every published stream-json 1.x carries open advisories and 3.x is an incompatible ESM rewrite, so the real package is not installed. stream-chain stays: google-ads-api requires it directly at load time.",
+  "main": "index.js",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "stream-chain": "^2.2.5"
+  }
+}
