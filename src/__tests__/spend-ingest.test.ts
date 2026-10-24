@@ -9,6 +9,7 @@ const {
   mockCreateRun,
   mockAddCosts,
   mockUpdateRun,
+  mockDeclare,
 } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
   mockGetRefreshToken: vi.fn(),
@@ -18,6 +19,7 @@ const {
   mockCreateRun: vi.fn(),
   mockAddCosts: vi.fn(),
   mockUpdateRun: vi.fn(),
+  mockDeclare: vi.fn(),
 }));
 
 vi.mock("../env", () => ({
@@ -46,6 +48,7 @@ vi.mock("../services/google-ads", () => ({
 vi.mock("../services/runs-service", () => ({
   createRun: (...args: unknown[]) => mockCreateRun(...args),
   addCosts: (...args: unknown[]) => mockAddCosts(...args),
+  declareProducedOutcomes: (...args: unknown[]) => mockDeclare(...args),
   updateRun: (...args: unknown[]) => mockUpdateRun(...args),
 }));
 
@@ -117,15 +120,24 @@ describe("ingestSpendForAccount", () => {
       "2026-08-26"
     );
 
-    // Run is keyed on GOOGLE's spend day, not on the poll day.
+    // Run is keyed on the campaign and GOOGLE's spend day, not on the poll day.
     expect(mockCreateRun).toHaveBeenCalledWith(
       expect.objectContaining({
         orgId: "org-1",
         userId: "user-1",
         taskName: "google-ads-spend:2026-08-24",
-        idempotencyKey: "google-ads-spend:org-1:1234567890:2026-08-24",
+        idempotencyKey: "google-ads-spend:org-1:1234567890:c1:2026-08-24",
       })
     );
+
+    // LEDGER-HISTORY-1024: the run states the ads it produced: one ad_shown per campaign-day.
+    expect(mockDeclare).toHaveBeenCalledWith(RUN_ID, [
+      {
+        outcomeKey: "ad_shown",
+        subjectService: "google-service",
+        subjectId: "google-ads:1234567890:c1:2026-08-24",
+      },
+    ]);
 
     // PASS-THROUGH: quantity is exactly the cents Google charged, no markup.
     expect(mockAddCosts).toHaveBeenCalledWith(
@@ -196,7 +208,7 @@ describe("ingestSpendForAccount", () => {
     expect(summary.centsDeclared).toBe(0);
   });
 
-  it("shares one run across every campaign that spent on the same day", async () => {
+  it("one run per campaign-day: each carries exactly that campaign's spend and its one ad_shown", async () => {
     mockGetCampaignSpendByDay.mockResolvedValue([
       { campaignId: "c1", date: "2026-08-24", costMicros: "1000000" },
       { campaignId: "c2", date: "2026-08-24", costMicros: "2000000" },
@@ -204,17 +216,34 @@ describe("ingestSpendForAccount", () => {
     ]);
     mockQuery.mockResolvedValue(upsertReturning(0));
     mockCreateRun
-      .mockResolvedValueOnce("run-24")
-      .mockResolvedValueOnce("run-25");
+      .mockResolvedValueOnce("run-c1-24")
+      .mockResolvedValueOnce("run-c2-24")
+      .mockResolvedValueOnce("run-c1-25");
 
     await ingestSpendForAccount(ACCOUNT, NOW);
 
-    expect(mockCreateRun).toHaveBeenCalledTimes(2);
-    expect(mockAddCosts.mock.calls.map((c) => c[0])).toEqual([
-      "run-24",
-      "run-24",
-      "run-25",
+    expect(mockCreateRun).toHaveBeenCalledTimes(3);
+    expect(mockAddCosts.mock.calls.map((c) => [c[0], c[1][0].quantity])).toEqual([
+      ["run-c1-24", 100],
+      ["run-c2-24", 200],
+      ["run-c1-25", 300],
     ]);
+    expect(mockDeclare.mock.calls.map((c) => [c[0], c[1][0].subjectId])).toEqual([
+      ["run-c1-24", "google-ads:1234567890:c1:2026-08-24"],
+      ["run-c2-24", "google-ads:1234567890:c2:2026-08-24"],
+      ["run-c1-25", "google-ads:1234567890:c1:2026-08-25"],
+    ]);
+  });
+
+  it("a refused outcome declaration fails loud and never advances declared_cents", async () => {
+    mockGetCampaignSpendByDay.mockResolvedValue([
+      { campaignId: "c1", date: "2026-08-24", costMicros: "12340000" },
+    ]);
+    mockQuery.mockResolvedValue(upsertReturning(0));
+    mockDeclare.mockRejectedValueOnce(new Error("Failed to declare outcomes: 400 unknown_outcome_key"));
+
+    await expect(ingestSpendForAccount(ACCOUNT, NOW)).rejects.toThrow("unknown_outcome_key");
+    expect(mockQuery).toHaveBeenCalledTimes(1);
   });
 
   it("fails loud when the cost cannot be declared — never records it as declared", async () => {
