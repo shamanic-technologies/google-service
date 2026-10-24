@@ -4,6 +4,7 @@ import { runMigrations } from "./db/migrate";
 import { backfillSilver } from "./services/backfill-silver";
 import { startAutoSync, startCalendarSync, startGmailFreshSync } from "./services/cron-sync";
 import { startSpendSync } from "./services/spend-cron";
+import { startThreadReplyOutcomes } from "./services/thread-reply-outcomes";
 import { resumePendingPurges } from "./services/account-purge";
 
 const main = async () => {
@@ -32,6 +33,8 @@ const main = async () => {
   startCalendarSync();
   // Google Ads spend ingestion — its own schedule, never chained to campaign work.
   startSpendSync();
+  // Declares every Gmail thread reply we sent as its lead's message_sent (LEDGER-HISTORY-1024).
+  startThreadReplyOutcomes();
 
   process.on("unhandledRejection", (reason) => {
     console.error("[google-service] Unhandled rejection:", reason);
