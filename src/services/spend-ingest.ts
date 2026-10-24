@@ -6,7 +6,7 @@ import {
   getCampaignSpendByDay,
 } from "./google-ads";
 import { getGoogleCredentials, getRefreshToken, CallerContext } from "./key-service";
-import { addCosts, createRun, updateRun } from "./runs-service";
+import { addCosts, createRun, declareProducedOutcomes, updateRun } from "./runs-service";
 
 /**
  * Catalogue line in costs-service. PASS-THROUGH: the unit is ONE USD cent of
@@ -44,14 +44,29 @@ export const isoDay = (now: Date, daysAgo = 0): string => {
 const SPEND_CALLER: CallerContext = { method: "CRON", path: "/cron/ads-spend" };
 
 /**
- * One run per (org, Ads account, Google spend day). The idempotency key is
- * namespaced on that triple so a re-read of the same day — the normal case,
- * since the lookback window overlaps — reuses the SAME run instead of minting a
- * new one, and any later restatement lands as an extra cost item on the run
- * that already carries that day.
+ * Catalogue outcome (features-service `GET /public/catalogue/steps`) a spend run
+ * produced: the ads Google showed. Subject = the campaign's day (an object this
+ * service holds in `google_ads_spend_daily`), so one run = one campaign-day =
+ * ONE `ad_shown` occurrence carrying exactly that campaign's spend
+ * (LEDGER-HISTORY-1024).
+ */
+export const ADS_SPEND_OUTCOME = "ad_shown";
+export const adShownSubject = (accountId: string, campaignId: string, spendDate: string) => ({
+  outcomeKey: ADS_SPEND_OUTCOME,
+  subjectService: "google-service",
+  subjectId: `google-ads:${accountId}:${campaignId}:${spendDate}`,
+});
+
+/**
+ * One run per (org, Ads account, campaign, Google spend day). The idempotency
+ * key is namespaced on that tuple so a re-read of the same day — the normal
+ * case, since the lookback window overlaps — reuses the SAME run instead of
+ * minting a new one, and any later restatement lands as an extra cost item on
+ * the run that already carries that campaign-day.
  */
 const runForSpendDay = async (
   account: SpendAccount,
+  campaignId: string,
   spendDate: string
 ): Promise<string> =>
   createRun({
@@ -59,7 +74,7 @@ const runForSpendDay = async (
     userId: account.userId,
     service: "google",
     taskName: `google-ads-spend:${spendDate}`,
-    idempotencyKey: `google-ads-spend:${account.orgId}:${account.accountId}:${spendDate}`,
+    idempotencyKey: `google-ads-spend:${account.orgId}:${account.accountId}:${campaignId}:${spendDate}`,
   });
 
 /**
@@ -103,7 +118,7 @@ export const ingestSpendForAccount = async (
     centsDeclared: 0,
   };
 
-  // One run per spend day, shared by every campaign that spent on that day.
+  // One run per campaign-day: it produced that campaign's ads shown that day.
   const runByDay = new Map<string, string>();
 
   for (const row of rows) {
@@ -144,10 +159,11 @@ export const ingestSpendForAccount = async (
       continue;
     }
 
-    let runId = runByDay.get(row.date);
+    const runKey = `${row.campaignId}:${row.date}`;
+    let runId = runByDay.get(runKey);
     if (!runId) {
-      runId = await runForSpendDay(account, row.date);
-      runByDay.set(row.date, runId);
+      runId = await runForSpendDay(account, row.campaignId, row.date);
+      runByDay.set(runKey, runId);
     }
 
     await addCosts(
@@ -165,6 +181,8 @@ export const ingestSpendForAccount = async (
       account.orgId,
       account.userId
     );
+    // The spend's outcome, stated on the same run (idempotent on a re-declare).
+    await declareProducedOutcomes(runId, [adShownSubject(account.accountId, row.campaignId, row.date)]);
 
     await query(
       `UPDATE google_ads_spend_daily

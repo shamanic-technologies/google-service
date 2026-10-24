@@ -113,3 +113,30 @@ export const addCosts = async (
     throw new Error(`Failed to add costs: ${res.status} ${body}`);
   }
 };
+
+export interface OutcomeOccurrence {
+  outcomeKey: string;
+  subjectService: string;
+  subjectId: string;
+}
+
+/**
+ * Declare on one of OUR runs the outcome occurrences it produced (runs-service
+ * ledger, COST-ACCOUNTING-1023). Idempotent at runs-service per (run, key,
+ * subject): a replay answers already_recorded. Fails loud.
+ */
+export const declareProducedOutcomes = async (
+  runId: string,
+  produced: OutcomeOccurrence[]
+): Promise<void> => {
+  const res = await fetch(`${env.RUNS_SERVICE_URL}/v1/platform-runs/${runId}/outcomes`, {
+    method: "POST",
+    headers: { ...baseHeaders(), "x-service-name": "google" },
+    body: JSON.stringify({ produced }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[google-service] Failed to declare outcomes on run ${runId}: ${res.status} body=${body}`);
+    throw new Error(`Failed to declare outcomes: ${res.status} ${body}`);
+  }
+};
