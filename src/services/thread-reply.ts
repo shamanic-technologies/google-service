@@ -14,6 +14,7 @@ import { createAccessTokenProvider, getGoogleAccountById } from "./google-tokens
 import { GMAIL_SEND_SCOPE } from "./google-oauth";
 import { upsertMessage } from "./gmail-ingest";
 import { parseMessageIdList } from "./addressed-messages";
+import { recordThreadReplySend } from "./thread-reply-outcomes";
 import type { CallerContext } from "./key-service";
 
 // A follow-up that lands IN the person's latest Gmail thread, FROM the address
@@ -251,6 +252,8 @@ export interface ReplyInput {
   threadId: string;
   bodyHtml: string;
   bodyText?: string;
+  /** The person's lead in lead-service: the subject of the message_sent this send declares. */
+  leadId?: string;
 }
 
 export interface ReplyResult {
@@ -420,8 +423,10 @@ export const replyInThread = async (
   // 15-minute delta would also see it). The email already left, so a failed
   // write is logged, never turned into an error the caller would retry.
   let recorded = false;
+  let sentAt = new Date();
   try {
     const full = await withTokenRetry(provider, (t) => getGmailMessage(t, sent.id));
+    if (full.internalDate) sentAt = new Date(Number(full.internalDate));
     await upsertMessage(orgId, account.id, {
       id: full.id,
       threadId: full.threadId,
@@ -434,6 +439,31 @@ export const replyInThread = async (
     console.error(
       `[google-service] thread-reply: sent ${sent.id} in thread ${sent.threadId} but mirror record FAILED: ${detail}`
     );
+  }
+
+  // LEDGER-HISTORY-1024: this send is a message_sent of the person; the sweep
+  // (thread-reply-outcomes.ts) declares it on this request run. Logged, never an
+  // error: the email already left.
+  if (runId) {
+    try {
+      await recordThreadReplySend({
+        orgId,
+        gmailMessageId: sent.id,
+        threadId: sent.threadId,
+        mailbox: thread.mailbox,
+        from: thread.fromAddress,
+        to: person,
+        runId,
+        leadId: input.leadId ?? null,
+        sentAt,
+      });
+    } catch (err) {
+      console.error(
+        `[google-service] thread-reply: sent ${sent.id} but the send record FAILED (message_sent undeclared): ${(err as Error).message}`
+      );
+    }
+  } else {
+    console.error(`[google-service] thread-reply: sent ${sent.id} with no run id (message_sent undeclared)`);
   }
 
   return {

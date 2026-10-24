@@ -822,6 +822,14 @@ export const GoogleThreadReplyBodySchema = z.object({
   threadId: z.string().min(1).describe("Gmail thread id, as served by GET /orgs/google/threads/latest"),
   bodyHtml: z.string().min(1),
   bodyText: z.string().optional().describe("Plain-text part; derived from bodyHtml when absent"),
+  leadId: z
+    .string()
+    .min(1)
+    .max(256)
+    .optional()
+    .describe(
+      "The person's lead id in lead-service (the same `leadId` the broadcast send carries). The reply is then declared to runs-service's ledger as a `message_sent` of that lead on this request's run (consuming its `message_written` and `email_checked`), dated when Gmail accepted it. Absent = the email still leaves, but its message_sent stays undeclared (never declared under a guessed subject)."
+    ),
 });
 
 export const GoogleThreadReplyResponseSchema = z.object({
