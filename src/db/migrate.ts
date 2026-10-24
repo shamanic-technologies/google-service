@@ -388,6 +388,34 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
 CREATE INDEX IF NOT EXISTS idx_google_calendar_events_changed ON google_calendar_events(changed_at, id);
 CREATE INDEX IF NOT EXISTS idx_google_calendar_events_meet_due
   ON google_calendar_events(end_at) WHERE meet_status = 'pending';
+
+-- LEDGER-HISTORY-1024: every Gmail thread reply this service SENT (POST
+-- /orgs/google/thread-replies), one row per sent message. It is this service's
+-- own record of the message_sent outcome it produced: the sweep in
+-- services/thread-reply-outcomes.ts declares it on the request run that sent it
+-- (runs-service ledger), dated sent_at. outcomes_declaration NULL = not declared
+-- yet; a row without lead_id is never declared under an invented subject.
+CREATE TABLE IF NOT EXISTS gmail_thread_reply_sends (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  gmail_message_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  mailbox TEXT NOT NULL,
+  from_address TEXT NOT NULL,
+  to_address TEXT NOT NULL,
+  run_id UUID NOT NULL,
+  lead_id TEXT,
+  sent_at TIMESTAMPTZ NOT NULL,
+  outcomes_declaration TEXT
+    CHECK (outcomes_declaration IN ('declared', 'run_gone', 'refused')),
+  outcomes_declared_at TIMESTAMPTZ,
+  outcomes_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, gmail_message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gmail_thread_reply_sends_pending
+  ON gmail_thread_reply_sends(sent_at DESC)
+  WHERE outcomes_declaration IS NULL AND lead_id IS NOT NULL;
 `;
 
 export const runMigrations = async (): Promise<void> => {
