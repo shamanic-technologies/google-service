@@ -172,6 +172,8 @@ Staff operate client brands as the agency and answer prospects by hand from thei
 
 Every dollar this service's runs (`runs.service_name = 'google'`) were ever charged is accounted for: $213.50 of `serper-dev-query` (51,464 runs, 2026-03-27..07-07, legacy search) is marked support `retired_product` by staff (runs-service, 2026-10-24); `google-ads-spend` has never been charged (0 rows in `google_ads_spend_daily`); a spend run declares its `ad_shown` (see the spend section). Request runs of mirror reads cost nothing themselves; a Jev body-clean judgment rides the CALLER's run (never mark it support).
 
+**A google `request` run with a non-google child other than `chat-service/judgments` is a BORROWED id, not our work** (LEDGER-RESIDUAL-1025). This service sends its own run id only to runs/key/chat-judgments calls it makes itself, and never returns or echoes it. Prod 2026-10-25: 385 foreign runs (chat complete/generate-image, workflow, campaigns created straight against campaign-service) sat under 31 google runs. EVERY one started after the google run had closed, from a staff probe. Their undeclared $4.03 (14 runs) is marked `staff_experiment` on the borrowed run through the owner door, per the doctrine "a probe borrowing a production run is marked on that run". Record + replay: `scripts/mark-borrowed-request-runs-20261025.mjs` (idempotent). A new case is fixed the same way, never by changing how our runs are created.
+
 ### Google Calendar: booked meetings + Meet attendance (GOOGLE-CALENDAR-INTEGRATION-1021)
 
 `src/services/calendar.ts`, `src/routes/calendar.ts`. Why: clients book through their own scheduling link (neocal, Calendly, by hand), so nothing told us a meeting was booked outside our AI booking, nor whether it was held.
