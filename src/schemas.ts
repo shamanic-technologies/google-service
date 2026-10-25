@@ -1,4 +1,8 @@
 import { z } from "zod";
+import "./lib/zod-v3-messages";
+
+// Ids use .guid(), not .uuid(): Zod 4 .uuid() demands RFC version/variant bits,
+// .guid() is the any-hex 8-4-4-4-12 check Zod 3 .uuid() ran.
 
 // ─── Health ───
 
@@ -32,7 +36,7 @@ export const AuthCallbackResponseSchema = z.object({
 // ─── Accounts ───
 
 export const AccountSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().guid(),
   orgId: z.string(),
   userId: z.string(),
   accountId: z.string(),
@@ -538,12 +542,12 @@ export const GoogleAuthCallbackResponseSchema = z.object({
   success: z.boolean(),
   // Which connection the round trip finished (the one asked at /auth/start).
   connection: GoogleConnectionSchema,
-  googleAccountId: z.string().uuid(),
+  googleAccountId: z.string().guid(),
   googleAccountEmail: z.string(),
   // Id of the sync job started for the org on a MAILBOX connect; poll
   // GET /orgs/google/sync/{jobId}. Null for a calendar (its first read runs in
   // the background and shows on GET /orgs/google/calendar/accounts).
-  syncJobId: z.string().uuid().nullable(),
+  syncJobId: z.string().guid().nullable(),
 });
 
 export const GoogleSyncSummarySchema = z.object({
@@ -564,16 +568,16 @@ export const GoogleSyncSummarySchema = z.object({
 export const GoogleSyncJobStatusEnum = z.enum(["running", "succeeded", "failed"]);
 
 export const GoogleSyncStartResponseSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.string().guid(),
   status: GoogleSyncJobStatusEnum,
 });
 
 export const GoogleSyncJobIdParamSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.string().guid(),
 });
 
 export const GoogleSyncJobResponseSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.string().guid(),
   status: GoogleSyncJobStatusEnum,
   summary: GoogleSyncSummarySchema.nullable(),
   error: z.string().nullable(),
@@ -584,14 +588,14 @@ export const GoogleSyncJobResponseSchema = z.object({
 export const GoogleMessagesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().optional(),
-  account_id: z.string().uuid().optional(),
+  account_id: z.string().guid().optional(),
   thread_id: z.string().optional(),
   participant: z.string().optional(),
 });
 
 export const GoogleMessageItemSchema = z.object({
-  id: z.string().uuid(),
-  googleAccountId: z.string().uuid(),
+  id: z.string().guid(),
+  googleAccountId: z.string().guid(),
   gmailMessageId: z.string(),
   threadId: z.string(),
   historyId: z.string(),
@@ -897,7 +901,7 @@ export const GoogleCorrespondentsNotConnectedSchema = z.object({
 export const GoogleContactsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().optional(),
-  account_id: z.string().uuid().optional(),
+  account_id: z.string().guid().optional(),
   query: z.string().optional(),
 });
 
@@ -909,8 +913,8 @@ export const GoogleContactLinksSchema = z.object({
 });
 
 export const GoogleContactItemSchema = z.object({
-  id: z.string().uuid(),
-  googleAccountId: z.string().uuid(),
+  id: z.string().guid(),
+  googleAccountId: z.string().guid(),
   resourceName: z.string(),
   etag: z.string().nullable(),
   payload: z.unknown(),
@@ -1034,7 +1038,7 @@ export const MeetParticipantSchema = z.object({
 });
 
 export const CalendarEventSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().guid(),
   orgId: z.string(),
   calendarEmail: z.string(),
   googleEventId: z.string(),

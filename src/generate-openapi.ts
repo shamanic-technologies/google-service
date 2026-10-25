@@ -1,10 +1,39 @@
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import * as fs from "fs";
 import * as path from "path";
 import * as schemas from "./schemas";
 
-const toSchema = (zodSchema: Parameters<typeof zodToJsonSchema>[0]) =>
-  zodToJsonSchema(zodSchema, { target: "openApi3" });
+// io "input": a field with .default() stays optional and a transformed query
+// param documents what the caller sends. The override keeps the document
+// equal to what zod-to-json-schema served under Zod 3: strip objects
+// close with additionalProperties false, string formats carry no regex
+// pattern, .int() carries no safe-integer bounds, an unknown field is optional.
+type Json = Record<string, unknown>;
+type Def = { type?: string; catchall?: unknown; shape?: Record<string, { _zod: { def: Def } }> };
+
+const toSchema = (zodSchema: z.ZodType) => {
+  const { $schema: _drop, ...schema } = z.toJSONSchema(zodSchema, {
+    target: "openapi-3.0",
+    io: "input",
+    unrepresentable: "any",
+    override: ({ zodSchema: zs, jsonSchema }) => {
+      const def = (zs as unknown as { _zod: { def: Def } })._zod.def;
+      const js = jsonSchema as Json;
+      if (def.type === "object") {
+        if (def.catchall === undefined && js.additionalProperties === undefined) js.additionalProperties = false;
+        if (Array.isArray(js.required) && def.shape) {
+          const shape = def.shape;
+          js.required = (js.required as string[]).filter((k) => !["unknown", "any"].includes(shape[k]?._zod.def.type ?? ""));
+          if ((js.required as string[]).length === 0) delete js.required;
+        }
+      }
+      if (typeof js.format === "string") delete js.pattern;
+      if (js.type === "integer" && js.minimum === Number.MIN_SAFE_INTEGER) delete js.minimum;
+      if (js.type === "integer" && js.maximum === Number.MAX_SAFE_INTEGER) delete js.maximum;
+    },
+  }) as Json;
+  return schema;
+};
 
 // ─── Serving stack paths (ad groups, keywords, negatives, ads, bidding) ───
 // Everything below the campaign, plus the managed advertiser account and the

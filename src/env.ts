@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "./lib/zod-v3-messages";
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(8080),
