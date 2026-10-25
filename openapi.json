@@ -343,19 +343,19 @@
                 "type": "string"
               },
               "cpa": {
-                "type": "number",
-                "nullable": true
+                "nullable": true,
+                "type": "number"
               },
               "roas": {
-                "type": "number",
-                "nullable": true
+                "nullable": true,
+                "type": "number"
               },
               "ctr": {
                 "type": "number"
               },
               "averageCpc": {
-                "type": "number",
-                "nullable": true
+                "nullable": true,
+                "type": "number"
               }
             },
             "required": [
@@ -395,19 +395,19 @@
             "type": "string"
           },
           "cpa": {
-            "type": "number",
-            "nullable": true
+            "nullable": true,
+            "type": "number"
           },
           "roas": {
-            "type": "number",
-            "nullable": true
+            "nullable": true,
+            "type": "number"
           },
           "ctr": {
             "type": "number"
           },
           "averageCpc": {
-            "type": "number",
-            "nullable": true
+            "nullable": true,
+            "type": "number"
           }
         },
         "required": [
@@ -466,6 +466,8 @@
         "type": "object",
         "properties": {
           "conversions": {
+            "minItems": 1,
+            "maxItems": 2000,
             "type": "array",
             "items": {
               "type": "object",
@@ -509,9 +511,7 @@
                 "conversionDateTime"
               ],
               "additionalProperties": false
-            },
-            "minItems": 1,
-            "maxItems": 2000
+            }
           },
           "validateOnly": {
             "type": "boolean"
@@ -532,8 +532,8 @@
             "type": "number"
           },
           "partialFailureError": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -570,15 +570,15 @@
                   "type": "number"
                 },
                 "runId": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "lastSeenAt": {
                   "type": "string"
                 },
                 "lastDeclaredAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 }
               },
               "required": [
@@ -628,8 +628,8 @@
           },
           "targetRoas": {
             "type": "number",
-            "exclusiveMinimum": true,
-            "minimum": 0
+            "minimum": 0,
+            "exclusiveMinimum": true
           }
         },
         "required": [
@@ -667,8 +667,8 @@
               },
               "targetRoas": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "minimum": 0,
+                "exclusiveMinimum": true
               }
             },
             "required": [
@@ -745,8 +745,8 @@
             "type": "string"
           },
           "cpcBidMicros": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "resourceName": {
             "type": "string"
@@ -783,8 +783,8 @@
                   "type": "string"
                 },
                 "cpcBidMicros": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "resourceName": {
                   "type": "string"
@@ -811,6 +811,8 @@
         "type": "object",
         "properties": {
           "keywords": {
+            "minItems": 1,
+            "maxItems": 2000,
             "type": "array",
             "items": {
               "type": "object",
@@ -846,9 +848,7 @@
                 "matchType"
               ],
               "additionalProperties": false
-            },
-            "minItems": 1,
-            "maxItems": 2000
+            }
           }
         },
         "required": [
@@ -860,6 +860,8 @@
         "type": "object",
         "properties": {
           "keywords": {
+            "minItems": 1,
+            "maxItems": 2000,
             "type": "array",
             "items": {
               "type": "object",
@@ -883,9 +885,7 @@
                 "matchType"
               ],
               "additionalProperties": false
-            },
-            "minItems": 1,
-            "maxItems": 2000
+            }
           }
         },
         "required": [
@@ -968,8 +968,8 @@
             "type": "boolean"
           },
           "cpcBidMicros": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "resourceName": {
             "type": "string"
@@ -1014,8 +1014,8 @@
                   "type": "boolean"
                 },
                 "cpcBidMicros": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "resourceName": {
                   "type": "string"
@@ -1084,6 +1084,8 @@
         "type": "object",
         "properties": {
           "headlines": {
+            "minItems": 3,
+            "maxItems": 15,
             "type": "array",
             "items": {
               "type": "object",
@@ -1107,25 +1109,43 @@
                 "text"
               ],
               "additionalProperties": false
-            },
-            "minItems": 3,
-            "maxItems": 15
+            }
           },
           "descriptions": {
+            "minItems": 2,
+            "maxItems": 4,
             "type": "array",
             "items": {
-              "$ref": "#/properties/headlines/items"
-            },
-            "minItems": 2,
-            "maxItems": 4
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pinnedField": {
+                  "type": "string",
+                  "enum": [
+                    "HEADLINE_1",
+                    "HEADLINE_2",
+                    "HEADLINE_3",
+                    "DESCRIPTION_1",
+                    "DESCRIPTION_2"
+                  ]
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
           },
           "finalUrls": {
+            "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "format": "uri"
-            },
-            "minItems": 1
+            }
           },
           "path1": {
             "type": "string",
@@ -1209,7 +1229,27 @@
           "descriptions": {
             "type": "array",
             "items": {
-              "$ref": "#/properties/headlines/items"
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pinnedField": {
+                  "type": "string",
+                  "enum": [
+                    "HEADLINE_1",
+                    "HEADLINE_2",
+                    "HEADLINE_3",
+                    "DESCRIPTION_1",
+                    "DESCRIPTION_2"
+                  ]
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
             }
           },
           "finalUrls": {
@@ -1219,12 +1259,12 @@
             }
           },
           "path1": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "path2": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "resourceName": {
             "type": "string"
@@ -1289,7 +1329,27 @@
                 "descriptions": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/properties/ads/items/properties/headlines/items"
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pinnedField": {
+                        "type": "string",
+                        "enum": [
+                          "HEADLINE_1",
+                          "HEADLINE_2",
+                          "HEADLINE_3",
+                          "DESCRIPTION_1",
+                          "DESCRIPTION_2"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "finalUrls": {
@@ -1299,12 +1359,12 @@
                   }
                 },
                 "path1": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "path2": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "resourceName": {
                   "type": "string"
@@ -1343,8 +1403,8 @@
             "type": "string"
           },
           "primaryStatus": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "primaryStatusReasons": {
             "type": "array",
@@ -1369,6 +1429,7 @@
             "type": "string"
           },
           "serving": {
+            "nullable": true,
             "type": "object",
             "properties": {
               "campaignId": {
@@ -1381,8 +1442,8 @@
                 "type": "string"
               },
               "primaryStatus": {
-                "type": "string",
-                "nullable": true
+                "nullable": true,
+                "type": "string"
               },
               "primaryStatusReasons": {
                 "type": "array",
@@ -1398,8 +1459,7 @@
               "primaryStatus",
               "primaryStatusReasons"
             ],
-            "additionalProperties": false,
-            "nullable": true
+            "additionalProperties": false
           },
           "adGroups": {
             "type": "array",
@@ -1419,8 +1479,8 @@
                   "type": "string"
                 },
                 "cpcBidMicros": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "resourceName": {
                   "type": "string"
@@ -1449,8 +1509,8 @@
                         "type": "boolean"
                       },
                       "cpcBidMicros": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "resourceName": {
                         "type": "string"
@@ -1472,7 +1532,45 @@
                 "negativeKeywords": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/properties/adGroups/items/properties/keywords/items"
+                    "type": "object",
+                    "properties": {
+                      "criterionId": {
+                        "type": "string"
+                      },
+                      "adGroupId": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "matchType": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "negative": {
+                        "type": "boolean"
+                      },
+                      "cpcBidMicros": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "resourceName": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "criterionId",
+                      "adGroupId",
+                      "text",
+                      "matchType",
+                      "status",
+                      "negative",
+                      "cpcBidMicros",
+                      "resourceName"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "ads": {
@@ -1518,7 +1616,27 @@
                       "descriptions": {
                         "type": "array",
                         "items": {
-                          "$ref": "#/properties/adGroups/items/properties/ads/items/properties/headlines/items"
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pinnedField": {
+                              "type": "string",
+                              "enum": [
+                                "HEADLINE_1",
+                                "HEADLINE_2",
+                                "HEADLINE_3",
+                                "DESCRIPTION_1",
+                                "DESCRIPTION_2"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "finalUrls": {
@@ -1528,12 +1646,12 @@
                         }
                       },
                       "path1": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "path2": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "resourceName": {
                         "type": "string"
@@ -1650,8 +1768,8 @@
                 "type": "string"
               },
               "brandId": {
-                "type": "string",
-                "nullable": true
+                "nullable": true,
+                "type": "string"
               },
               "managerAccountId": {
                 "type": "string"
@@ -1706,8 +1824,8 @@
                   "type": "string"
                 },
                 "brandId": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "managerAccountId": {
                   "type": "string"
@@ -1763,15 +1881,15 @@
             "type": "number"
           },
           "runId": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "lastSeenAt": {
             "type": "string"
           },
           "lastDeclaredAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -1826,13 +1944,13 @@
             "minLength": 1
           },
           "status": {
+            "default": "PAUSED",
             "type": "string",
             "enum": [
               "ENABLED",
               "PAUSED",
               "REMOVED"
-            ],
-            "default": "PAUSED"
+            ]
           },
           "budgetAmountMicros": {
             "type": "string",
@@ -1865,8 +1983,8 @@
               },
               "targetRoas": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "minimum": 0,
+                "exclusiveMinimum": true
               }
             },
             "required": [
@@ -1988,8 +2106,8 @@
               },
               "targetRoas": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "minimum": 0,
+                "exclusiveMinimum": true
               }
             },
             "required": [
@@ -2328,6 +2446,8 @@
         "type": "object",
         "properties": {
           "queries": {
+            "minItems": 1,
+            "maxItems": 50,
             "type": "array",
             "items": {
               "type": "object",
@@ -2364,9 +2484,7 @@
                 "type"
               ],
               "additionalProperties": false
-            },
-            "minItems": 1,
-            "maxItems": 50
+            }
           }
         },
         "required": [
@@ -2617,9 +2735,9 @@
             "type": "string"
           },
           "syncJobId": {
+            "nullable": true,
             "type": "string",
-            "format": "uuid",
-            "nullable": true
+            "format": "uuid"
           }
         },
         "required": [
@@ -2660,12 +2778,12 @@
                   "type": "string"
                 },
                 "lastSyncedAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "lastSyncError": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 }
               },
               "required": [
@@ -2738,28 +2856,28 @@
                   "type": "string"
                 },
                 "title": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "startAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "endAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "bookedAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "updatedAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "organizerEmail": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "attendees": {
                   "type": "array",
@@ -2770,12 +2888,12 @@
                         "type": "string"
                       },
                       "displayName": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "responseStatus": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "organizer": {
                         "type": "boolean"
@@ -2813,8 +2931,8 @@
                         "type": "object",
                         "properties": {
                           "displayName": {
-                            "type": "string",
-                            "nullable": true
+                            "nullable": true,
+                            "type": "string"
                           },
                           "kind": {
                             "type": "string",
@@ -2825,12 +2943,12 @@
                             ]
                           },
                           "joinedAt": {
-                            "type": "string",
-                            "nullable": true
+                            "nullable": true,
+                            "type": "string"
                           },
                           "leftAt": {
-                            "type": "string",
-                            "nullable": true
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -2843,12 +2961,12 @@
                       }
                     },
                     "error": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "checkedAt": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2883,8 +3001,8 @@
             }
           },
           "nextCursor": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "hasMore": {
             "type": "boolean"
@@ -2993,6 +3111,7 @@
             ]
           },
           "summary": {
+            "nullable": true,
             "type": "object",
             "properties": {
               "accounts": {
@@ -3048,19 +3167,18 @@
               "gmail",
               "contacts"
             ],
-            "additionalProperties": false,
-            "nullable": true
+            "additionalProperties": false
           },
           "error": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "startedAt": {
             "type": "string"
           },
           "finishedAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -3098,12 +3216,12 @@
             "type": "string"
           },
           "fromEmail": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "fromName": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "to": {
             "type": "array",
@@ -3112,16 +3230,16 @@
             }
           },
           "subject": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "snippet": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "sentAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "labels": {
             "type": "array",
@@ -3177,12 +3295,12 @@
                   "type": "string"
                 },
                 "fromEmail": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "fromName": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "to": {
                   "type": "array",
@@ -3191,16 +3309,16 @@
                   }
                 },
                 "subject": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "snippet": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "sentAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "labels": {
                   "type": "array",
@@ -3228,8 +3346,8 @@
             }
           },
           "nextCursor": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -3260,8 +3378,8 @@
             }
           },
           "status": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -3287,20 +3405,20 @@
             "type": "string"
           },
           "etag": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "payload": {},
           "fetchedAt": {
             "type": "string"
           },
           "displayName": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "primaryEmail": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "emails": {
             "type": "array",
@@ -3315,20 +3433,20 @@
             }
           },
           "organization": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "jobTitle": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "photoUrl": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "updatedAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "deleted": {
             "type": "boolean"
@@ -3355,8 +3473,8 @@
                 }
               },
               "status": {
-                "type": "string",
-                "nullable": true
+                "nullable": true,
+                "type": "string"
               }
             },
             "required": [
@@ -3407,20 +3525,20 @@
                   "type": "string"
                 },
                 "etag": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "payload": {},
                 "fetchedAt": {
                   "type": "string"
                 },
                 "displayName": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "primaryEmail": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "emails": {
                   "type": "array",
@@ -3435,20 +3553,20 @@
                   }
                 },
                 "organization": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "jobTitle": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "photoUrl": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "updatedAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "deleted": {
                   "type": "boolean"
@@ -3475,8 +3593,8 @@
                       }
                     },
                     "status": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3509,8 +3627,8 @@
             }
           },
           "nextCursor": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -3551,16 +3669,16 @@
                   "type": "string"
                 },
                 "subject": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "firstMessageAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "lastMessageAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "messageCount": {
                   "type": "integer"
@@ -3585,12 +3703,12 @@
                         ]
                       },
                       "fromEmail": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "fromName": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "to": {
                         "type": "array",
@@ -3599,16 +3717,16 @@
                         }
                       },
                       "subject": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "snippet": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "sentAt": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "labels": {
                         "type": "array",
@@ -3617,16 +3735,16 @@
                         }
                       },
                       "bodyText": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "bodyTextOriginal": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "bodyHtml": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "type": "string"
                       },
                       "bodyStatus": {
                         "type": "string",
@@ -3718,16 +3836,16 @@
             "type": "string"
           },
           "name": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "nameSource": {
+            "nullable": true,
             "type": "string",
             "enum": [
               "message",
               "contact"
-            ],
-            "nullable": true
+            ]
           },
           "outboundMessages": {
             "type": "integer"
@@ -3739,20 +3857,20 @@
             "type": "boolean"
           },
           "firstMessageAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "lastMessageAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "lastOutboundAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "lastInboundAt": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -3799,16 +3917,16 @@
                   "type": "string"
                 },
                 "name": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "nameSource": {
+                  "nullable": true,
                   "type": "string",
                   "enum": [
                     "message",
                     "contact"
-                  ],
-                  "nullable": true
+                  ]
                 },
                 "outboundMessages": {
                   "type": "integer"
@@ -3820,20 +3938,20 @@
                   "type": "boolean"
                 },
                 "firstMessageAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "lastMessageAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "lastOutboundAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "lastInboundAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 }
               },
               "required": [
@@ -3905,20 +4023,20 @@
         "type": "object",
         "properties": {
           "addresses": {
+            "maxItems": 1000,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 3
-            },
-            "maxItems": 1000
+            }
           },
           "domains": {
+            "maxItems": 50,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
-            },
-            "maxItems": 50
+            }
           },
           "since": {
             "type": "string",
@@ -3964,8 +4082,8 @@
                   "type": "string"
                 },
                 "threadId": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "direction": {
                   "type": "string",
@@ -3975,12 +4093,12 @@
                   ]
                 },
                 "messageId": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "inReplyTo": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "references": {
                   "type": "array",
@@ -3989,12 +4107,12 @@
                   }
                 },
                 "fromEmail": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "fromName": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "to": {
                   "type": "array",
@@ -4015,12 +4133,12 @@
                   }
                 },
                 "subject": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "sentAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "labels": {
                   "type": "array",
@@ -4032,48 +4150,48 @@
                   "type": "object",
                   "properties": {
                     "autoSubmitted": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "precedence": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutoreply": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutorespond": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutoResponseSuppress": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutogenerated": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xFailedRecipients": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "listId": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "listUnsubscribe": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "returnPath": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "contentType": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4092,12 +4210,12 @@
                   "additionalProperties": false
                 },
                 "mimeType": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "bodyText": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "bodyStatus": {
                   "type": "string",
@@ -4134,8 +4252,8 @@
             }
           },
           "nextCursor": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -4168,13 +4286,13 @@
         "type": "object",
         "properties": {
           "addresses": {
+            "minItems": 1,
+            "maxItems": 1000,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 3
-            },
-            "minItems": 1,
-            "maxItems": 1000
+            }
           },
           "since": {
             "type": "string",
@@ -4235,8 +4353,8 @@
                   "type": "string"
                 },
                 "threadId": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "direction": {
                   "type": "string",
@@ -4247,12 +4365,12 @@
                   ]
                 },
                 "messageId": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "inReplyTo": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "references": {
                   "type": "array",
@@ -4261,12 +4379,12 @@
                   }
                 },
                 "fromEmail": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "fromName": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "to": {
                   "type": "array",
@@ -4287,12 +4405,12 @@
                   }
                 },
                 "subject": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "sentAt": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "labels": {
                   "type": "array",
@@ -4304,48 +4422,48 @@
                   "type": "object",
                   "properties": {
                     "autoSubmitted": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "precedence": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutoreply": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutorespond": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutoResponseSuppress": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xAutogenerated": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "xFailedRecipients": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "listId": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "listUnsubscribe": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "returnPath": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     },
                     "contentType": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4364,12 +4482,12 @@
                   "additionalProperties": false
                 },
                 "mimeType": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "bodyText": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "bodyStatus": {
                   "type": "string",
@@ -4413,8 +4531,8 @@
             }
           },
           "nextCursor": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -4466,9 +4584,9 @@
                 "description": "The owner address a reply is written from: the address the person wrote to, or that answered them, on the newest message where one took part"
               },
               "lastMessageAt": {
-                "type": "string",
                 "nullable": true,
-                "description": "When the thread's newest message was sent (any participant)"
+                "description": "When the thread's newest message was sent (any participant)",
+                "type": "string"
               },
               "lastMessageDirection": {
                 "type": "string",
@@ -4479,8 +4597,8 @@
                 ]
               },
               "subject": {
-                "type": "string",
-                "nullable": true
+                "nullable": true,
+                "type": "string"
               },
               "sendPermission": {
                 "type": "boolean",
@@ -4543,14 +4661,14 @@
             "minLength": 1
           },
           "bodyText": {
-            "type": "string",
-            "description": "Plain-text part; derived from bodyHtml when absent"
+            "description": "Plain-text part; derived from bodyHtml when absent",
+            "type": "string"
           },
           "leadId": {
+            "description": "The person's lead id in lead-service (the same `leadId` the broadcast send carries). The reply is then declared to runs-service's ledger as a `message_sent` of that lead on this request's run (consuming its `message_written` and `email_checked`), dated when Gmail accepted it. Absent = the email still leaves, but its message_sent stays undeclared (never declared under a guessed subject).",
             "type": "string",
             "minLength": 1,
-            "maxLength": 256,
-            "description": "The person's lead id in lead-service (the same `leadId` the broadcast send carries). The reply is then declared to runs-service's ledger as a `message_sent` of that lead on this request's run (consuming its `message_written` and `email_checked`), dated when Gmail accepted it. Absent = the email still leaves, but its message_sent stays undeclared (never declared under a guessed subject)."
+            "maxLength": 256
           }
         },
         "required": [
@@ -4589,9 +4707,9 @@
             "description": "`Re: <thread subject>`"
           },
           "inReplyTo": {
-            "type": "string",
             "nullable": true,
-            "description": "Message-ID of the thread's newest message (In-Reply-To; also appended to References)"
+            "description": "Message-ID of the thread's newest message (In-Reply-To; also appended to References)",
+            "type": "string"
           },
           "recorded": {
             "type": "boolean",
@@ -4668,8 +4786,8 @@
             }
           },
           "status": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -4705,8 +4823,8 @@
             }
           },
           "status": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -4732,12 +4850,12 @@
             ]
           },
           "gmailUnavailableReason": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "gmailUnavailableSince": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "string"
           },
           "scopes": {
             "type": "array",
@@ -4749,9 +4867,9 @@
             "type": "string"
           },
           "disconnectError": {
-            "type": "string",
             "nullable": true,
-            "description": "Why the last disconnect attempt failed (the mailbox is still connected; retry the disconnect). Null when none failed."
+            "description": "Why the last disconnect attempt failed (the mailbox is still connected; retry the disconnect). Null when none failed.",
+            "type": "string"
           }
         },
         "required": [
@@ -4784,12 +4902,12 @@
                   ]
                 },
                 "gmailUnavailableReason": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "gmailUnavailableSince": {
-                  "type": "string",
-                  "nullable": true
+                  "nullable": true,
+                  "type": "string"
                 },
                 "scopes": {
                   "type": "array",
@@ -4801,9 +4919,9 @@
                   "type": "string"
                 },
                 "disconnectError": {
-                  "type": "string",
                   "nullable": true,
-                  "description": "Why the last disconnect attempt failed (the mailbox is still connected; retry the disconnect). Null when none failed."
+                  "description": "Why the last disconnect attempt failed (the mailbox is still connected; retry the disconnect). Null when none failed.",
+                  "type": "string"
                 }
               },
               "required": [
