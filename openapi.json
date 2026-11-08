@@ -2691,7 +2691,8 @@
             "type": "string",
             "enum": [
               "mailbox",
-              "calendar"
+              "calendar",
+              "search_console"
             ]
           }
         },
@@ -2724,7 +2725,8 @@
             "type": "string",
             "enum": [
               "mailbox",
-              "calendar"
+              "calendar",
+              "search_console"
             ]
           },
           "googleAccountId": {
@@ -2746,6 +2748,179 @@
           "googleAccountId",
           "googleAccountEmail",
           "syncJobId"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleSearchConsoleAccountsResponse": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "sync_failing",
+                    "reconnect_required"
+                  ]
+                },
+                "connectedAt": {
+                  "type": "string"
+                },
+                "lastSyncedAt": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "lastSyncError": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "siteUrl": {
+                        "type": "string"
+                      },
+                      "permissionLevel": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "brandId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "counting",
+                          "no_brand",
+                          "brand_ambiguous",
+                          "covered",
+                          "unverified",
+                          "not_listed",
+                          "disconnected"
+                        ]
+                      },
+                      "lastSyncedAt": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "lastSyncError": {
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "siteUrl",
+                      "permissionLevel",
+                      "brandId",
+                      "status",
+                      "lastSyncedAt",
+                      "lastSyncError"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "email",
+                "status",
+                "connectedAt",
+                "lastSyncedAt",
+                "lastSyncError",
+                "properties"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleSearchConsoleClicksResponse": {
+        "type": "object",
+        "properties": {
+          "outcomeKey": {
+            "type": "string",
+            "enum": [
+              "google_search_click"
+            ]
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "siteUrl": {
+                  "type": "string"
+                },
+                "brandId": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "siteUrl",
+                "brandId",
+                "date",
+                "clicks"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "totalClicks": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "outcomeKey",
+          "days",
+          "totalClicks"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleSearchConsoleDisconnectResponse": {
+        "type": "object",
+        "properties": {
+          "disconnected": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "grant": {
+            "type": "string",
+            "enum": [
+              "revoked",
+              "already_revoked",
+              "kept_for_other_connection"
+            ]
+          }
+        },
+        "required": [
+          "disconnected",
+          "email",
+          "grant"
         ],
         "additionalProperties": false
       },
@@ -7711,6 +7886,162 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/orgs/google/search-console/accounts": {
+      "get": {
+        "summary": "List the org's connected Google Search Console accounts and their properties",
+        "description": "Each Google account this org connected for Search Console (POST /orgs/google/auth/start with connection=search_console, its own consent, read-only) with its health: status=reconnect_required when Google refuses the grant (show a Reconnect button: the same connect flow), sync_failing when the last read failed for another reason (lastSyncError). properties[] = every Search Console property the account sees, each with the brand it counts clicks for and its status: counting (its daily clicks are Units of the outcome google_search_click on brandId), no_brand (no brand of the org owns that domain), brand_ambiguous (two brands share it), covered (another counting property of the same brand already counts these clicks, e.g. https://x.com/ under sc-domain:x.com), unverified (Google lists it but the account cannot read it), not_listed, disconnected, pending (not read yet). Read every ~12 h.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connected accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSearchConsoleAccountsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/google/search-console/clicks": {
+      "get": {
+        "summary": "Google search clicks counted per property and Google day",
+        "description": "The 'Google search click' Units this org holds in runs-service, per property x Google day (Search Console's own date, Pacific time): one Unit per click, declared on a run of the brand that owns the site, dated noon UTC of that day. Search Console data lags ~2-3 days and is revised: the trailing 10 days are re-read on every pass, and a revised day is re-declared (the old run voided), so these figures always equal Search Console's latest answer for the listed days. Optional brandId, since, until (YYYY-MM-DD, inclusive).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "brandId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Counted clicks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSearchConsoleClicksResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/google/search-console/accounts/{email}": {
+      "delete": {
+        "summary": "Disconnect one Google Search Console account",
+        "description": "Stops reading the account. Clicks already counted stay counted (they happened) and the properties stay known, so a reconnect never counts a day twice. The Google grant is revoked unless the same Google account is also connected as a mailbox or a calendar (grant=kept_for_other_connection). 502 reason=google_revoke_failed keeps it connected (retry). 404 reason=search_console_not_found.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrgId"
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/FeatureSlug"
+          },
+          {
+            "$ref": "#/components/parameters/BrandId"
+          },
+          {
+            "$ref": "#/components/parameters/AudienceId"
+          },
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "description": "The connected Google account email (URL-encoded). Matched case-insensitively."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSearchConsoleDisconnectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such account connected for this org (reason=search_console_not_found)"
+          },
+          "502": {
+            "description": "Google did not confirm the revoke (reason=google_revoke_failed). Still connected; retry."
           }
         }
       }

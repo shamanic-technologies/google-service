@@ -37,6 +37,11 @@ import {
   syncCalendarInBackground,
   upsertCalendarAccount,
 } from "../services/calendar";
+import {
+  hasSearchConsoleScope,
+  syncSearchConsoleInBackground,
+  upsertSearchConsoleAccount,
+} from "../services/search-console";
 import { schedulePurge } from "../services/account-purge";
 import { upsertGoogleToken } from "../services/google-tokens";
 import { syncOrg } from "../services/sync";
@@ -192,6 +197,42 @@ router.get(
           connection: "calendar",
           googleAccountId: calendar.id,
           googleAccountEmail: calendar.googleAccountEmail,
+          syncJobId: null,
+        });
+        return;
+      }
+
+      // A Search Console connection (its own consent) lands in its own table too.
+      if (pending.connection === "search_console") {
+        const grantedScopes = tokens.scope ?? "";
+        if (!hasSearchConsoleScope(grantedScopes)) {
+          res.status(400).json({
+            error:
+              "Google did not grant Search Console access. Connect again and keep the Search Console permission ticked.",
+            reason: "search_console_permission_missing",
+          });
+          return;
+        }
+        const account = await upsertSearchConsoleAccount({
+          orgId,
+          userId,
+          googleAccountEmail: email,
+          refreshToken: tokens.refresh_token,
+          accessToken: tokens.access_token,
+          accessTokenExpiresAt: expiresAt,
+          scopes: grantedScopes,
+        });
+        syncSearchConsoleInBackground(account, callerCtx(req));
+        traceEvent(
+          req.runId!,
+          { service: "google-service", event: "google-search-console-connected", detail: `email=${email}` },
+          req.headers
+        ).catch(() => {});
+        res.json({
+          success: true,
+          connection: "search_console",
+          googleAccountId: account.id,
+          googleAccountEmail: account.googleAccountEmail,
           syncJobId: null,
         });
         return;

@@ -15,6 +15,10 @@ const envSchema = z.object({
   // the sender's own words from footers/signatures in conversation bodies.
   CHAT_SERVICE_URL: z.string().url(),
   CHAT_SERVICE_API_KEY: z.string().min(1),
+  // brand-service: an org's brands + their domains, to tie each Search Console
+  // property to the brand that owns the site (GSC-CONNECTOR-1108).
+  BRAND_SERVICE_URL: z.string().url(),
+  BRAND_SERVICE_API_KEY: z.string().min(1),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_GMAIL_BACKFILL_DAYS: z.coerce.number().int().min(1).default(365),
   // Interval (hours) between the FULL background sync of all connected Google
@@ -37,6 +41,12 @@ const envSchema = z.object({
   // for up to ~3 days (and conversions longer), so a window wider than one day
   // is what lets a restatement be picked up and declared as a delta.
   GOOGLE_ADS_SPEND_LOOKBACK_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+  // Google Search Console clicks (GSC-CONNECTOR-1108): hours between passes,
+  // days re-read on each pass (Google revises the last days), days read on a
+  // property's first pass.
+  GOOGLE_SEARCH_CONSOLE_SYNC_INTERVAL_HOURS: z.coerce.number().min(0.1).default(12),
+  GOOGLE_SEARCH_CONSOLE_LOOKBACK_DAYS: z.coerce.number().int().min(3).max(90).default(10),
+  GOOGLE_SEARCH_CONSOLE_BACKFILL_DAYS: z.coerce.number().int().min(3).max(480).default(30),
 });
 
 export type Env = z.infer<typeof envSchema>;
