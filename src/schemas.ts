@@ -519,12 +519,13 @@ export const BatchSearchResponseSchema = z.object({
 
 // ─── Google CRM (Gmail + People bronze) ───
 
-export const GoogleConnectionSchema = z.enum(["mailbox", "calendar"]);
+export const GoogleConnectionSchema = z.enum(["mailbox", "calendar", "search_console"]);
 
 export const GoogleAuthStartBodySchema = z.object({
   redirectUri: z.string().url().optional(),
   // Which consent to ask for: the mailbox (Gmail + contacts, default) or the
-  // calendar (events + Meet attendance, read-only). Never both in one consent.
+  // calendar (events + Meet attendance, read-only), or Google Search Console
+  // (search analytics, read-only). Never two in one consent.
   connection: GoogleConnectionSchema.optional(),
 });
 
@@ -546,7 +547,8 @@ export const GoogleAuthCallbackResponseSchema = z.object({
   googleAccountEmail: z.string(),
   // Id of the sync job started for the org on a MAILBOX connect; poll
   // GET /orgs/google/sync/{jobId}. Null for a calendar (its first read runs in
-  // the background and shows on GET /orgs/google/calendar/accounts).
+  // the background and shows on GET /orgs/google/calendar/accounts), and for
+  // Search Console (GET /orgs/google/search-console/accounts).
   syncJobId: z.string().guid().nullable(),
 });
 
@@ -1070,4 +1072,67 @@ export const CalendarEventChangesResponseSchema = z.object({
   events: z.array(CalendarEventSchema),
   nextCursor: z.string().nullable(),
   hasMore: z.boolean(),
+});
+
+
+// ─── Google Search Console (GSC-CONNECTOR-1108) ───
+
+const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
+
+export const SearchConsoleClicksQuerySchema = z.object({
+  brandId: z.string().min(1).optional(),
+  since: IsoDate.optional(),
+  until: IsoDate.optional(),
+});
+
+export const SearchConsolePropertyStatusSchema = z.enum([
+  "pending",
+  "counting",
+  "no_brand",
+  "brand_ambiguous",
+  "covered",
+  "unverified",
+  "not_listed",
+  "disconnected",
+]);
+
+export const SearchConsolePropertySchema = z.object({
+  siteUrl: z.string(),
+  permissionLevel: z.string().nullable(),
+  brandId: z.string().nullable(),
+  status: SearchConsolePropertyStatusSchema,
+  lastSyncedAt: z.string().nullable(),
+  lastSyncError: z.string().nullable(),
+});
+
+export const SearchConsoleAccountSchema = z.object({
+  email: z.string(),
+  status: z.enum(["active", "sync_failing", "reconnect_required"]),
+  connectedAt: z.string(),
+  lastSyncedAt: z.string().nullable(),
+  lastSyncError: z.string().nullable(),
+  properties: z.array(SearchConsolePropertySchema),
+});
+
+export const SearchConsoleAccountsResponseSchema = z.object({
+  accounts: z.array(SearchConsoleAccountSchema),
+});
+
+export const SearchConsoleClicksResponseSchema = z.object({
+  outcomeKey: z.literal("google_search_click"),
+  days: z.array(
+    z.object({
+      siteUrl: z.string(),
+      brandId: z.string().nullable(),
+      date: z.string(),
+      clicks: z.number().int(),
+    })
+  ),
+  totalClicks: z.number().int(),
+});
+
+export const SearchConsoleDisconnectResponseSchema = z.object({
+  disconnected: z.literal(true),
+  email: z.string(),
+  grant: z.enum(["revoked", "already_revoked", "kept_for_other_connection"]),
 });

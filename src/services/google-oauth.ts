@@ -30,10 +30,24 @@ export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
-export type GoogleConnection = "mailbox" | "calendar";
+// Google Search Console connection (GSC-CONNECTOR-1108): its own consent too.
+// Read-only = the search analytics of every property the person can see; each
+// property's daily clicks become Units of the outcome "Google search click".
+export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+
+export const GOOGLE_SEARCH_CONSOLE_SCOPES = [
+  SEARCH_CONSOLE_SCOPE,
+  "https://www.googleapis.com/auth/userinfo.email",
+];
+
+export type GoogleConnection = "mailbox" | "calendar" | "search_console";
 
 export const scopesForConnection = (connection: GoogleConnection): string[] =>
-  connection === "calendar" ? GOOGLE_CALENDAR_SCOPES : GOOGLE_CRM_SCOPES;
+  connection === "calendar"
+    ? GOOGLE_CALENDAR_SCOPES
+    : connection === "search_console"
+      ? GOOGLE_SEARCH_CONSOLE_SCOPES
+      : GOOGLE_CRM_SCOPES;
 
 export interface PkcePair {
   verifier: string;

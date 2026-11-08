@@ -2,7 +2,7 @@ import { createApp } from "./app";
 import { env } from "./env";
 import { runMigrations } from "./db/migrate";
 import { backfillSilver } from "./services/backfill-silver";
-import { startAutoSync, startCalendarSync, startGmailFreshSync } from "./services/cron-sync";
+import { startAutoSync, startCalendarSync, startGmailFreshSync, startSearchConsoleSync } from "./services/cron-sync";
 import { startSpendSync } from "./services/spend-cron";
 import { startThreadReplyOutcomes } from "./services/thread-reply-outcomes";
 import { resumePendingPurges } from "./services/account-purge";
@@ -31,6 +31,8 @@ const main = async () => {
   startGmailFreshSync();
   // Connected Google Calendars: booked meetings + Meet attendance.
   startCalendarSync();
+  // Connected Google Search Console properties: daily clicks as "Google search click" Units.
+  startSearchConsoleSync();
   // Google Ads spend ingestion — its own schedule, never chained to campaign work.
   startSpendSync();
   // Declares every Gmail thread reply we sent as its lead's message_sent (LEDGER-HISTORY-1024).
