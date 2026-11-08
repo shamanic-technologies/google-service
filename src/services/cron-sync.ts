@@ -4,6 +4,7 @@ import { syncOrg } from "./sync";
 import { ingestGmailForAccount } from "./gmail-ingest";
 import { listGmailDeltaAccounts } from "./google-tokens";
 import { listAllCalendarAccounts, syncCalendarAccount } from "./calendar";
+import { listAllSearchConsoleAccounts, syncSearchConsoleAccount } from "./search-console";
 import type { CallerContext } from "./key-service";
 
 const CRON_CALLER: CallerContext = { method: "CRON", path: "/cron/auto-sync" };
@@ -131,6 +132,47 @@ export const startCalendarSync = (): void => {
         .catch((err) =>
           console.error(`[google-service] calendar-sync tick failed: ${(err as Error).message}`)
         )
+        .finally(() => schedule(intervalMs));
+    }, delayMs);
+    timer.unref();
+  };
+  schedule(FRESH_FIRST_TICK_MS);
+};
+
+const SEARCH_CONSOLE_CALLER: CallerContext = { method: "CRON", path: "/cron/search-console" };
+
+// One pass over every connected Search Console account (GSC-CONNECTOR-1108).
+// Each account isolated: one failure never stops the others.
+export const runSearchConsoleSyncOnce = async (): Promise<void> => {
+  const accounts = await listAllSearchConsoleAccounts();
+  for (const account of accounts) {
+    try {
+      const s = await syncSearchConsoleAccount(account, SEARCH_CONSOLE_CALLER);
+      if (s) {
+        console.log(
+          `[google-service] search-console org=${account.orgId} account=${account.id}: ` +
+            `${s.counting}/${s.properties} properties counting, ${s.declared} day(s) declared, ${s.withdrawn} withdrawn`
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[google-service] search-console failed for org=${account.orgId} account=${account.id}: ${(err as Error).message}`
+      );
+    }
+  }
+};
+
+// Search Console publishes a day ~2-3 days late and revises it: a pass every
+// few hours re-reads the trailing days. First tick ~60s after boot (deploys
+// recreate the container more often than the interval fires), then chained.
+export const startSearchConsoleSync = (): void => {
+  const hours = env.GOOGLE_SEARCH_CONSOLE_SYNC_INTERVAL_HOURS;
+  const intervalMs = Math.round(hours * 60 * 60 * 1000);
+  console.log(`[google-service] search-console sync scheduled every ${hours}h`);
+  const schedule = (delayMs: number) => {
+    const timer = setTimeout(() => {
+      void runSearchConsoleSyncOnce()
+        .catch((err) => console.error(`[google-service] search-console tick failed: ${(err as Error).message}`))
         .finally(() => schedule(intervalMs));
     }, delayMs);
     timer.unref();

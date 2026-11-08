@@ -1,6 +1,6 @@
 # google-service
 
-Google Ads API v23 wrapper for MCC agency management (campaigns, spend cost declaration, offline conversion upload), plus Google CRM bronze→silver ingestion (Gmail + People readonly) feeding the dashboard CRM at `/orgs/{orgId}/services/crm`.
+Google Ads API v23 wrapper for MCC agency management (campaigns, spend cost declaration, offline conversion upload), plus Google CRM bronze→silver ingestion (Gmail + People readonly) feeding the dashboard CRM at `/orgs/{orgId}/services/crm`, Google Calendar, and Google Search Console clicks as « Google search click » Units.
 
 ## Identity
 
@@ -93,6 +93,9 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `GET` | `/orgs/google/calendar/accounts` | The org's connected Google Calendars + health. See "Google Calendar". |
 | `DELETE` | `/orgs/google/calendar/accounts/{email}` | Disconnect one calendar. See "Google Calendar". |
 | `GET` | `/internal/calendar/events` | Internal changes feed of calendar events (booked meetings + Meet attendance), cross-org. |
+| `GET` | `/orgs/google/search-console/accounts` | The org's connected Search Console accounts + each property's brand and status. See "Google Search Console". |
+| `GET` | `/orgs/google/search-console/clicks` | Counted « Google search click » Units per property x Google day (`brandId`/`since`/`until`). |
+| `DELETE` | `/orgs/google/search-console/accounts/{email}` | Disconnect one Search Console account. See "Google Search Console". |
 | `PUT` | `/orgs/google/contact-links` | Upsert per-contact links on `(org, resourceName)`. Body `{resourceName, orgIds, brandIds, featureSlugs, status?}`; `resourceName` in the BODY (never path). Returns the persisted `{resourceName, orgIds, brandIds, featureSlugs, status}`. |
 
 ### Disconnect (`DELETE /orgs/google/accounts/{email}`)
@@ -185,6 +188,18 @@ Every dollar this service's runs (`runs.service_name = 'google'`) were ever char
 - **Disconnect** `DELETE /orgs/google/calendar/accounts/{email}`: deletes the calendar + its events (cascade, small). Revokes at Google UNLESS the same address is a connected mailbox in any org (`grant: kept_for_mailbox`): a revoke kills every token of the grant. Conversely a mailbox disconnect revokes the shared grant and the calendar then lists `sync_failing` (reconnect).
 - No metered platform cost (the user's own OAuth token, free Google quotas).
 - **Platform prerequisite**: the Google Calendar API and Google Meet REST API enabled on the OAuth client's Cloud project, both scopes on its consent screen (sensitive scopes: Google verification).
+
+### Google Search Console: « Google search click » Units (GSC-CONNECTOR-1108)
+
+`src/services/search-console.ts`, `src/routes/search-console.ts`. Owner 2026-11-08: Google organic clicks are an outcome every client tracks on dashboard v2, ours included; it is a connector any client plugs, never a read of treg or our internal tools.
+- **Its own consent**: `POST /orgs/google/auth/start` `connection: "search_console"` asks `webmasters.readonly` only; the same `/auth/callback` stores the grant in `google_search_console_accounts` (never `google_oauth_tokens`). Box unticked = 400 `search_console_permission_missing`. First read starts in the background at connect, then every `GOOGLE_SEARCH_CONSOLE_SYNC_INTERVAL_HOURS` (12; first tick ~60 s after boot, chained). A refresh answering `invalid_grant` = account `reconnect_required` (the dashboard shows Reconnect = the same connect flow).
+- **Property → brand**: each listed property (`google_search_console_properties`, key `(org, site_url)`) is tied to the org's brand whose domain is the property's host or a parent of it (brand-service `GET /orgs/brands`, env `BRAND_SERVICE_URL`/`_API_KEY`); most specific domain wins, two brands on it = `brand_ambiguous`, none = `no_brand` (silver not read, nothing declared). Two properties of one brand that overlap (`sc-domain:x.com` and `https://x.com/`, or a URL prefix under another) never count twice: the covering one counts, the other is `covered`. A property that stops counting voids its runs (`withdrawProperty`).
+- **Layers**: bronze `google_search_console_days_raw` (Google's raw `searchAnalytics.query` answers, dimension `page`, per property x day), silver `google_search_console_page_days` (property x day x page: clicks, impressions, ctr, position), ledger map `google_search_console_click_days` (which run holds the day's declaration, fingerprint, revision).
+- **Units**: outcome `google_search_click` (features-service catalogue step created 2026-11-08, subject kind object, toward `website_visit`). ONE occurrence per click (subject `search-console-page-day:<silver id>:<n>`, performer `{kind: organic, name: google-search-console}`), on one spend-free run per property x Google day (`service google`, `taskName google-search-clicks:<date>`, the property's brand as `x-brand-id`), declared through the batch door with `occurredAt = <date>T12:00:00Z` so the UTC day is Google's day. Page/query/country/device are attributes of the click, never in the outcome name.
+- **Lag + revisions**: Google lists a day once final (~2-3 days). Each pass reads the window's per-date totals first (trailing `GOOGLE_SEARCH_CONSOLE_LOOKBACK_DAYS` 10, first pass `GOOGLE_SEARCH_CONSOLE_BACKFILL_DAYS` 30), then each LISTED day by page. A day not listed is never read as zero. A day whose figures moved: void its run (owner door `POST /v1/platform-runs/:id/outcomes/void`), declare on a new run (idempotency key `...:r<revision+1>`); each step is recorded before the next (`pending`/`voided`), so a pass dying half-way is finished by the next one, never doubled.
+- **Disconnect** keeps properties + declared days (`account_id` SET NULL): a reconnect finds the days already declared. Revoke skipped when the same Google account is a connected mailbox or calendar (`kept_for_other_connection`).
+- **Platform prerequisite**: the Google Search Console API enabled on the OAuth client's Cloud project and `webmasters.readonly` on its consent screen. No metered cost (the user's own token, free quota).
+- Tests: `src/__tests__/search-console.test.ts` on PGlite with the real migration.
 
 ### Idempotency strategy: upsert-when-different
 

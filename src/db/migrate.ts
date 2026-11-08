@@ -416,6 +416,90 @@ CREATE TABLE IF NOT EXISTS gmail_thread_reply_sends (
 CREATE INDEX IF NOT EXISTS idx_gmail_thread_reply_sends_pending
   ON gmail_thread_reply_sends(sent_at DESC)
   WHERE outcomes_declaration IS NULL AND lead_id IS NOT NULL;
+
+-- ─── Google Search Console connection (GSC-CONNECTOR-1108) ───
+-- Its own consent and its own table, like the calendar: never a mailbox row.
+CREATE TABLE IF NOT EXISTS google_search_console_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  google_account_email TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  access_token TEXT,
+  access_token_expires_at TIMESTAMPTZ,
+  scopes TEXT NOT NULL,
+  last_synced_at TIMESTAMPTZ,
+  last_sync_error TEXT,
+  reconnect_required BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, google_account_email)
+);
+
+-- One row per (org, Search Console property). Outlives a disconnect
+-- (account_id SET NULL): the click declarations below hang on it, and a
+-- reconnect must find them again or it would declare the same clicks twice.
+CREATE TABLE IF NOT EXISTS google_search_console_properties (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  account_id UUID REFERENCES google_search_console_accounts(id) ON DELETE SET NULL,
+  site_url TEXT NOT NULL,
+  permission_level TEXT,
+  brand_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  backfilled_at TIMESTAMPTZ,
+  last_synced_at TIMESTAMPTZ,
+  last_sync_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(org_id, site_url)
+);
+
+-- Bronze: Google's raw searchAnalytics answer(s) for one property x day
+-- (dimension page), rewritten only when Google's answer changed.
+CREATE TABLE IF NOT EXISTS google_search_console_days_raw (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  property_id UUID NOT NULL REFERENCES google_search_console_properties(id) ON DELETE CASCADE,
+  search_date DATE NOT NULL,
+  request JSONB NOT NULL,
+  responses JSONB NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(property_id, search_date)
+);
+
+-- Silver: one row per property x day x page, typed from bronze.
+CREATE TABLE IF NOT EXISTS google_search_console_page_days (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  property_id UUID NOT NULL REFERENCES google_search_console_properties(id) ON DELETE CASCADE,
+  search_date DATE NOT NULL,
+  page TEXT NOT NULL,
+  clicks INTEGER NOT NULL,
+  impressions INTEGER NOT NULL,
+  ctr DOUBLE PRECISION,
+  position DOUBLE PRECISION,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(property_id, search_date, page)
+);
+
+-- Which runs-service run holds the current "Google search click" declaration
+-- of one property x day. A revised day voids that run and declares on a new
+-- one (revision + 1), so the ledger always equals Google's latest figure.
+CREATE TABLE IF NOT EXISTS google_search_console_click_days (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id TEXT NOT NULL,
+  property_id UUID NOT NULL REFERENCES google_search_console_properties(id) ON DELETE CASCADE,
+  search_date DATE NOT NULL,
+  brand_id TEXT,
+  fingerprint TEXT NOT NULL,
+  clicks INTEGER NOT NULL,
+  run_id UUID,
+  revision INTEGER NOT NULL DEFAULT 0,
+  declared_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(property_id, search_date)
+);
 `;
 
 export const runMigrations = async (): Promise<void> => {

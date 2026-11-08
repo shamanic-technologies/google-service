@@ -346,6 +346,9 @@ const spec = {
       GoogleAuthStartBody: toSchema(schemas.GoogleAuthStartBodySchema),
       GoogleAuthStartResponse: toSchema(schemas.GoogleAuthStartResponseSchema),
       GoogleAuthCallbackResponse: toSchema(schemas.GoogleAuthCallbackResponseSchema),
+      GoogleSearchConsoleAccountsResponse: toSchema(schemas.SearchConsoleAccountsResponseSchema),
+      GoogleSearchConsoleClicksResponse: toSchema(schemas.SearchConsoleClicksResponseSchema),
+      GoogleSearchConsoleDisconnectResponse: toSchema(schemas.SearchConsoleDisconnectResponseSchema),
       GoogleCalendarAccountsResponse: toSchema(schemas.GoogleCalendarAccountsResponseSchema),
       GoogleCalendarDisconnectResponse: toSchema(schemas.GoogleCalendarDisconnectResponseSchema),
       CalendarEventChangesResponse: toSchema(schemas.CalendarEventChangesResponseSchema),
@@ -1247,6 +1250,81 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
             description: "No staff mailbox mirrored, or no staff exchange with this address",
             content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleStaffConversationNotFound" } } },
           },
+        },
+      },
+    },
+    "/orgs/google/search-console/accounts": {
+      get: {
+        summary: "List the org's connected Google Search Console accounts and their properties",
+        description:
+          "Each Google account this org connected for Search Console (POST /orgs/google/auth/start with connection=search_console, its own consent, read-only) with its health: status=reconnect_required when Google refuses the grant (show a Reconnect button: the same connect flow), sync_failing when the last read failed for another reason (lastSyncError). properties[] = every Search Console property the account sees, each with the brand it counts clicks for and its status: counting (its daily clicks are Units of the outcome google_search_click on brandId), no_brand (no brand of the org owns that domain), brand_ambiguous (two brands share it), covered (another counting property of the same brand already counts these clicks, e.g. https://x.com/ under sc-domain:x.com), unverified (Google lists it but the account cannot read it), not_listed, disconnected, pending (not read yet). Read every ~12 h.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        responses: {
+          "200": {
+            description: "Connected accounts",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleSearchConsoleAccountsResponse" } } },
+          },
+        },
+      },
+    },
+    "/orgs/google/search-console/clicks": {
+      get: {
+        summary: "Google search clicks counted per property and Google day",
+        description:
+          "The 'Google search click' Units this org holds in runs-service, per property x Google day (Search Console's own date, Pacific time): one Unit per click, declared on a run of the brand that owns the site, dated noon UTC of that day. Search Console data lags ~2-3 days and is revised: the trailing 10 days are re-read on every pass, and a revised day is re-declared (the old run voided), so these figures always equal Search Console's latest answer for the listed days. Optional brandId, since, until (YYYY-MM-DD, inclusive).",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "brandId", in: "query", required: false, schema: { type: "string" } },
+          { name: "since", in: "query", required: false, schema: { type: "string", format: "date" } },
+          { name: "until", in: "query", required: false, schema: { type: "string", format: "date" } },
+        ],
+        responses: {
+          "200": {
+            description: "Counted clicks",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleSearchConsoleClicksResponse" } } },
+          },
+        },
+      },
+    },
+    "/orgs/google/search-console/accounts/{email}": {
+      delete: {
+        summary: "Disconnect one Google Search Console account",
+        description:
+          "Stops reading the account. Clicks already counted stay counted (they happened) and the properties stay known, so a reconnect never counts a day twice. The Google grant is revoked unless the same Google account is also connected as a mailbox or a calendar (grant=kept_for_other_connection). 502 reason=google_revoke_failed keeps it connected (retry). 404 reason=search_console_not_found.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          {
+            name: "email",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "email" },
+            description: "The connected Google account email (URL-encoded). Matched case-insensitively.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Disconnected",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleSearchConsoleDisconnectResponse" } } },
+          },
+          "404": { description: "No such account connected for this org (reason=search_console_not_found)" },
+          "502": { description: "Google did not confirm the revoke (reason=google_revoke_failed). Still connected; retry." },
         },
       },
     },
