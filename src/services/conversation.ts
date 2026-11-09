@@ -27,6 +27,8 @@ export interface ConversationMessage {
   fromEmail: string | null;
   fromName: string | null;
   to: string[];
+  // Cc recipients, same silver normalization as `to` (empty when none).
+  cc: string[];
   subject: string | null;
   snippet: string | null;
   sentAt: string | null;
@@ -72,6 +74,7 @@ interface MessageRow {
   from_email: string | null;
   from_name: string | null;
   to_emails: string[] | null;
+  cc_emails: string[] | null;
   subject: string | null;
   snippet: string | null;
   sent_at: Date | null;
@@ -130,7 +133,7 @@ export const getConversation = async (
   // messages, then reversed to oldest-first for the caller.
   const rows = await query(
     `SELECT m.gmail_message_id, m.thread_id, m.payload, m.fetched_at,
-            s.from_email, s.from_name, s.to_emails, s.subject, s.snippet, s.sent_at, s.labels
+            s.from_email, s.from_name, s.to_emails, s.cc_emails, s.subject, s.snippet, s.sent_at, s.labels
        FROM gmail_messages_raw m
        LEFT JOIN gmail_messages_silver s
          ON s.org_id = m.org_id AND s.gmail_message_id = m.gmail_message_id
@@ -194,6 +197,7 @@ const shapeConversation = (
       fromEmail: row.from_email ?? null,
       fromName: row.from_name ?? null,
       to: row.to_emails ?? [],
+      cc: row.cc_emails ?? [],
       subject: row.subject ?? null,
       snippet: row.snippet ?? null,
       sentAt: toIso(row.sent_at) ?? toIso(row.fetched_at),
@@ -276,7 +280,7 @@ export const getStaffConversation = async (
 
   const rows = await query(
     `SELECT m.gmail_message_id, m.thread_id, m.payload, m.fetched_at,
-            s.from_email, s.from_name, s.to_emails, s.subject, s.snippet, s.sent_at, s.labels
+            s.from_email, s.from_name, s.to_emails, s.cc_emails, s.subject, s.snippet, s.sent_at, s.labels
        FROM gmail_messages_silver s
        JOIN gmail_messages_raw m
          ON m.org_id = s.org_id AND m.gmail_message_id = s.gmail_message_id

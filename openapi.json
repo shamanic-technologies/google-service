@@ -3891,6 +3891,13 @@
                           "type": "string"
                         }
                       },
+                      "cc": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Cc recipients (lower-cased, empty when none)."
+                      },
                       "subject": {
                         "nullable": true,
                         "type": "string"
@@ -3948,6 +3955,7 @@
                       "fromEmail",
                       "fromName",
                       "to",
+                      "cc",
                       "subject",
                       "snippet",
                       "sentAt",
