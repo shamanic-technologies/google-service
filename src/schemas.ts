@@ -661,6 +661,7 @@ export const GoogleConversationMessageSchema = z.object({
   fromEmail: z.string().nullable(),
   fromName: z.string().nullable(),
   to: z.array(z.string()),
+  cc: z.array(z.string()).describe("Cc recipients (lower-cased, empty when none)."),
   subject: z.string().nullable(),
   snippet: z.string().nullable(),
   sentAt: z.string().nullable(),

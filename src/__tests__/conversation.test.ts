@@ -310,6 +310,45 @@ describe("getConversation", () => {
     expect(mockQuery.mock.calls[1][0]).toContain("labels ? 'SENT'");
     expect(mockQuery.mock.calls[1][1]).toEqual([ORG]);
   });
+
+  it("serves each message's Cc recipients, for a person only in Cc and one in To (empty when none)", async () => {
+    const CLIENT = "client@brand.com";
+    const US = "kevin@distribute.you";
+    mockQuery.mockReset();
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          // Reply-all: the client writes to the prospect with us only in Cc.
+          rawRow({ gmail_message_id: "m2", from_email: CLIENT, to_emails: [PROSPECT], cc_emails: [US], sent_at: new Date("2026-01-02T00:00:00Z") }),
+          rawRow({ gmail_message_id: "m1", from_email: OWNER, to_emails: [PROSPECT], cc_emails: null, sent_at: new Date("2026-01-01T00:00:00Z") }),
+        ],
+      });
+
+    const ccOnly = await getConversation(ORG, US, IDENTITY);
+    expect(ccOnly.found).toBe(true);
+    if (!ccOnly.found) return;
+    const msgs = ccOnly.conversation.threads[0].messages;
+    expect(msgs.map((m) => [m.gmailMessageId, m.to, m.cc])).toEqual([
+      ["m1", [PROSPECT], []],
+      ["m2", [PROSPECT], [US]],
+    ]);
+    // The message read selects the silver Cc column.
+    expect(mockQuery.mock.calls[3][0]).toContain("s.cc_emails");
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ email: OWNER }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ thread_id: "t1" }] })
+      .mockResolvedValueOnce({
+        rows: [rawRow({ gmail_message_id: "m3", from_email: OWNER, to_emails: [PROSPECT], cc_emails: [US] })],
+      });
+    const inTo = await getConversation(ORG, PROSPECT, IDENTITY);
+    if (!inTo.found) throw new Error("expected found");
+    expect(inTo.conversation.threads[0].messages[0].cc).toEqual([US]);
+  });
 });
 
 describe("getStaffConversation", () => {

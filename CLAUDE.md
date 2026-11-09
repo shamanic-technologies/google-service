@@ -120,6 +120,7 @@ The mirror holds exchanges the outreach provider never saw — a forwarding rule
 - **Ordering + truncation.** Threads oldest-first by their first message, messages oldest-first inside each. Past `limit` the MOST RECENT messages are kept and `truncated: true` is returned — an exchange is never silently cut at its head without saying so.
 - **Bodies are cleaned** (see "Cleaned bodies" below): `bodyText` = what the sender wrote, `bodyTextOriginal` = the full original, `bodyCleanStatus` says how.
 - `direction` is `inbound` (from the prospect), `outbound` (from one of the org's connected Google accounts) or `other`.
+- Each message serves `to` and `cc` (silver `to_emails`/`cc_emails`, lower-cased, `[]` when none) on both the org and staff reads (GMAIL-CC-ON-CONVERSATION-1109): crm-service's judge reads who was copied on a reply-all.
 
 ### Cleaned bodies on the conversation read — what the sender actually wrote
 
