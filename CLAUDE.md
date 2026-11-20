@@ -154,7 +154,7 @@ Staff operate client brands as the agency and answer prospects by hand from thei
 
 `src/services/addressed-messages.ts`. Six Gandi sending domains (pressbeat.ai, growthagency.ch/.life/.forum/.network/.store) forwarded every inbound message to `kevin.lourd@gmail.com` WITHOUT a copy until 2026-10-12, so those prospect replies exist only in this mirror (~68k messages, mostly warmup). instantly-service backfills them from here (one-shot, re-runnable). Same narrow cross-org rule as the staff read:
 - **Which mailboxes**: only `STAFF_ADDRESSES` tokens. **Which messages**: To/Cc holds a requested address (or one at a requested domain) → `direction: inbound`, or From is one → `outbound` (staff answering via send-as). A staff address or a staff mailbox domain (`gmail.com`, `distribute.you`) is refused as a filter (400): it would be the whole mailbox.
-- Body `{addresses?, domains?, since?, until?, limit≤500 (200), cursor?}`; keyset on silver `id` (PK walk, ~30 ms a page; order stable, not chronological), opaque `nextCursor` until null. Payloads detoasted only for the served page.
+- Body `{addresses?, domains?, since?, until?, limit≤500 (200), cursor?, includeSpam?}`; `includeSpam: true` also serves Gmail-SPAM rows (Cloudflare-forwarded replies land there, PF-CLOUDFLARE-1120), never DRAFT/TRASH; absent = exchanged mail only; keyset on silver `id` (PK walk, ~30 ms a page; order stable, not chronological), opaque `nextCursor` until null. Payloads detoasted only for the served page.
 - Serves Message-ID / In-Reply-To / References verbatim, automation headers, top `mimeType`, original `bodyText` (no cleaning, no Jev). `id` = `mailbox:gmailMessageId`.
 
 ### An org's mail with its prospects (`POST /orgs/google/addressed-messages`)

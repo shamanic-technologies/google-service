@@ -718,6 +718,10 @@ export const StaffAddressedMessagesBodySchema = z
     until: z.string().datetime({ offset: true }).optional(),
     limit: z.number().int().min(1).max(500).optional(),
     cursor: z.string().min(1).optional(),
+    includeSpam: z
+      .boolean()
+      .optional()
+      .describe("true = also serve messages Gmail labelled SPAM (a reply forwarded into the staff Gmail can land there and is still a reply); drafts and trash are never served. Default false = unchanged (DRAFT, SPAM and TRASH excluded)."),
   })
   .refine((b) => (b.addresses?.length ?? 0) + (b.domains?.length ?? 0) > 0, {
     message: "at least one address or domain is required",

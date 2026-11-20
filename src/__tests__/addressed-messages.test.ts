@@ -190,6 +190,43 @@ describe("getAddressedMessages", () => {
     expect((mockQuery.mock.calls[4] as [string, unknown[]])[1][4]).toBe(r2.id);
   });
 
+  it("excludes DRAFT, SPAM and TRASH by default (exchanged mail only)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: STAFF_ACCOUNT, org_id: STAFF_ORG, email: "kevin.lourd@gmail.com" }] })
+      .mockResolvedValueOnce({ rows: [] });
+    await getAddressedMessages({ domains: ["pressbeat.ai"] });
+    const [sql] = mockQuery.mock.calls[1] as [string, unknown[]];
+    expect(sql).toContain("'DRAFT', 'SPAM', 'TRASH'");
+  });
+
+  it("includeSpam: true serves a SPAM-labelled row, still never DRAFT or TRASH (PF-CLOUDFLARE-1120)", async () => {
+    const spam = silverRow({ labels: ["SPAM"] });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: STAFF_ACCOUNT, org_id: STAFF_ORG, email: "kevin.lourd@gmail.com" }] })
+      .mockResolvedValueOnce({ rows: [spam] })
+      .mockResolvedValueOnce({
+        rows: [{ org_id: STAFF_ORG, gmail_message_id: "g1", payload: payload({ "Message-ID": "<fwd@x>" }, "Interested") }],
+      });
+    const res = await getAddressedMessages({ domains: ["pressbeat.ai"], includeSpam: true });
+    if (!res.found) throw new Error("expected found");
+    expect(res.page.messages).toHaveLength(1);
+    expect(res.page.messages[0].labels).toEqual(["SPAM"]);
+    expect(res.page.messages[0].bodyText).toBe("Interested");
+
+    const [sql] = mockQuery.mock.calls[1] as [string, unknown[]];
+    expect(sql).not.toContain("'SPAM'");
+    expect(sql).toContain("'DRAFT', 'TRASH'");
+  });
+
+  it("includeSpam: false keeps the default predicate", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: STAFF_ACCOUNT, org_id: STAFF_ORG, email: "kevin.lourd@gmail.com" }] })
+      .mockResolvedValueOnce({ rows: [] });
+    await getAddressedMessages({ domains: ["pressbeat.ai"], includeSpam: false });
+    const [sql] = mockQuery.mock.calls[1] as [string, unknown[]];
+    expect(sql).toContain("'DRAFT', 'SPAM', 'TRASH'");
+  });
+
   it("rejects a forged cursor", async () => {
     await expect(getAddressedMessages({ domains: ["pressbeat.ai"], cursor: "bm9wZQ" })).rejects.toThrow(/invalid cursor/);
   });
