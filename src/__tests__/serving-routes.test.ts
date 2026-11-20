@@ -134,11 +134,12 @@ import { createApp } from "../app";
 
 const app = createApp();
 
+const KEY = "test-google-service-key";
 const ORG = "00000000-0000-4000-a000-000000000001";
 const USER = "00000000-0000-4000-a000-000000000002";
 const RUN = "00000000-0000-4000-a000-000000000003";
 const CHILD_RUN = "00000000-0000-4000-a000-000000000004";
-const idHeaders = { "x-org-id": ORG, "x-user-id": USER, "x-run-id": RUN };
+const idHeaders = { "x-api-key": KEY, "x-org-id": ORG, "x-user-id": USER, "x-run-id": RUN };
 
 /** No row in `accounts`, one row in `google_ads_managed_accounts`. */
 const managedAccount = () => {

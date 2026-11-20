@@ -116,7 +116,7 @@ const TEST_USER_ID = "00000000-0000-4000-a000-000000000002";
 const TEST_PARENT_RUN_ID = "00000000-0000-4000-a000-000000000003";
 const TEST_CHILD_RUN_ID = "00000000-0000-4000-a000-000000000004";
 
-const idHeaders = { "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID, "x-run-id": TEST_PARENT_RUN_ID };
+const idHeaders = { "x-api-key": "test-google-service-key", "x-org-id": TEST_ORG_ID, "x-user-id": TEST_USER_ID, "x-run-id": TEST_PARENT_RUN_ID };
 
 const TEST_GOOGLE_CREDS = {
   clientId: "test-client-id",
@@ -153,6 +153,7 @@ describe("Identity headers middleware", () => {
   it("returns 400 without x-org-id", async () => {
     const res = await request(app)
       .get("/auth/url")
+      .set("x-api-key", "test-google-service-key")
       .set("x-user-id", TEST_USER_ID)
       .set("x-run-id", TEST_PARENT_RUN_ID);
     expect(res.status).toBe(400);
@@ -162,6 +163,7 @@ describe("Identity headers middleware", () => {
   it("returns 400 without x-user-id", async () => {
     const res = await request(app)
       .get("/auth/url")
+      .set("x-api-key", "test-google-service-key")
       .set("x-org-id", TEST_ORG_ID)
       .set("x-run-id", TEST_PARENT_RUN_ID);
     expect(res.status).toBe(400);
@@ -171,6 +173,7 @@ describe("Identity headers middleware", () => {
   it("returns 400 without x-run-id", async () => {
     const res = await request(app)
       .get("/auth/url")
+      .set("x-api-key", "test-google-service-key")
       .set("x-org-id", TEST_ORG_ID)
       .set("x-user-id", TEST_USER_ID);
     expect(res.status).toBe(400);
@@ -180,6 +183,7 @@ describe("Identity headers middleware", () => {
   it("returns 400 when x-org-id is not a valid UUID", async () => {
     const res = await request(app)
       .get("/auth/url")
+      .set("x-api-key", "test-google-service-key")
       .set("x-org-id", "platform")
       .set("x-user-id", TEST_USER_ID)
       .set("x-run-id", TEST_PARENT_RUN_ID);
@@ -190,6 +194,7 @@ describe("Identity headers middleware", () => {
   it("returns 400 when x-user-id is not a valid UUID", async () => {
     const res = await request(app)
       .get("/auth/url")
+      .set("x-api-key", "test-google-service-key")
       .set("x-org-id", TEST_ORG_ID)
       .set("x-user-id", "not-a-uuid")
       .set("x-run-id", TEST_PARENT_RUN_ID);
@@ -200,6 +205,7 @@ describe("Identity headers middleware", () => {
   it("returns 400 when x-run-id is not a valid UUID", async () => {
     const res = await request(app)
       .get("/auth/url")
+      .set("x-api-key", "test-google-service-key")
       .set("x-org-id", TEST_ORG_ID)
       .set("x-user-id", TEST_USER_ID)
       .set("x-run-id", "bad-run-id");

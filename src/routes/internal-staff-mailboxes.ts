@@ -1,5 +1,4 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { apiKeyAuth } from "../middleware/api-key-auth";
 import { validateBody, validateQuery } from "../middleware/validate";
 import { GoogleConversationQuerySchema, StaffAddressedMessagesBodySchema } from "../schemas";
 import { getStaffConversation } from "../services/conversation";
@@ -10,8 +9,6 @@ import {
 } from "../services/addressed-messages";
 
 const router = Router();
-
-router.use(apiKeyAuth);
 
 // ─── GET /internal/staff-mailboxes/conversation ───
 //

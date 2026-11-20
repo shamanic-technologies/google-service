@@ -2,7 +2,6 @@ import { Router, Request, Response, NextFunction } from "express";
 import { exchangedOnly } from "../lib/exchanged-mail";
 import { query } from "../db/client";
 import { env } from "../env";
-import { apiKeyAuth } from "../middleware/api-key-auth";
 import { validateBody, validateParams, validateQuery } from "../middleware/validate";
 import { traceEvent } from "../lib/trace-event";
 import {
@@ -55,8 +54,6 @@ import {
 } from "../services/org-addressed-messages";
 
 const router = Router();
-
-router.use(apiKeyAuth);
 
 const callerCtx = (req: Request): CallerContext => ({
   method: req.method,
