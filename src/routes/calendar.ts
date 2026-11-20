@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { query } from "../db/client";
-import { apiKeyAuth } from "../middleware/api-key-auth";
 import { validateParams, validateQuery } from "../middleware/validate";
 import { traceEvent } from "../lib/trace-event";
 import { CalendarEventChangesQuerySchema, GoogleAccountEmailParamSchema } from "../schemas";
@@ -12,8 +11,6 @@ import {
 } from "../services/calendar";
 
 const router = Router();
-
-router.use(apiKeyAuth);
 
 // ─── GET /orgs/google/calendar/accounts ───
 //

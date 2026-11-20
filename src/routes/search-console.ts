@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { query } from "../db/client";
-import { apiKeyAuth } from "../middleware/api-key-auth";
 import { validateParams, validateQuery } from "../middleware/validate";
 import { traceEvent } from "../lib/trace-event";
 import { GoogleAccountEmailParamSchema, SearchConsoleClicksQuerySchema } from "../schemas";
@@ -10,8 +9,6 @@ import { listOrgClickDays, listOrgSearchConsoleAccounts } from "../services/sear
 // Google Search Console connection (GSC-CONNECTOR-1108). Connect = POST
 // /orgs/google/auth/start with connection=search_console.
 const router = Router();
-
-router.use(apiKeyAuth);
 
 // ─── GET /orgs/google/search-console/accounts ───
 // The org's connected Search Console accounts, each with its properties: which
