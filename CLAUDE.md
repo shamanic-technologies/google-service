@@ -4,6 +4,8 @@ Google Ads API v23 wrapper for MCC agency management (campaigns, spend cost decl
 
 ## Identity
 
+**Service key (SEC-GOOGLE-KEY-1120):** every route except `/health` and `/openapi.json` requires `x-api-key == GOOGLE_SERVICE_API_KEY` (constant-time compare, `src/middleware/api-key-auth.ts`), mounted ONCE app-wide in `src/app.ts` BEFORE identity parsing and `createRequestRun` (an unauthenticated call opens no run, reads no row). Never mount it per-router: until 2026-11-20 only 4 routers did, and the Google Ads, Serper and Ads-OAuth routes were open on the public `google.distribute.you`. No route is browser-facing: both OAuth callbacks are proxied server-side with the key. A new route needs nothing: it sits behind the gate.
+
 All endpoints require `x-org-id` and `x-user-id` headers (UUIDs from client-service).
 These are the internal org/user identifiers — never use Clerk IDs (clerkOrgId/clerkUserId).
 The client-service is the source of truth for identity resolution.

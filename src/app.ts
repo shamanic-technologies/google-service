@@ -13,6 +13,7 @@ import { errorHandler } from "./middleware/error-handler";
 import { requireIdentityHeaders } from "./middleware/validate";
 import { createRequestRun } from "./middleware/create-request-run";
 import { requestLogger } from "./middleware/request-logger";
+import { apiKeyAuth } from "./middleware/api-key-auth";
 
 export const createApp = () => {
   const app = express();
@@ -34,6 +35,12 @@ export const createApp = () => {
       res.status(404).json({ error: "OpenAPI spec not generated yet. Run npm run generate-openapi" });
     }
   });
+
+  // SEC-GOOGLE-KEY-1120: every route below requires x-api-key == GOOGLE_SERVICE_API_KEY,
+  // checked BEFORE identity parsing and run creation (an unauthenticated call opens no run).
+  // Only /health and /openapi.json above are public. There is no browser-facing route:
+  // both OAuth callbacks are proxied server-side by api-service with the key.
+  app.use(apiKeyAuth);
 
   // All routes below require x-org-id, x-user-id, and x-run-id headers
   app.use(requireIdentityHeaders);
