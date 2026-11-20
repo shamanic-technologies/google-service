@@ -4237,6 +4237,10 @@
           "cursor": {
             "type": "string",
             "minLength": 1
+          },
+          "includeSpam": {
+            "type": "boolean",
+            "description": "true = also serve messages Gmail labelled SPAM (a reply forwarded into the staff Gmail can land there and is still a reply); drafts and trash are never served. Default false = unchanged (DRAFT, SPAM and TRASH excluded)."
           }
         },
         "additionalProperties": false

@@ -14,5 +14,16 @@ export const NOT_EXCHANGED_LABELS = ["DRAFT", "SPAM", "TRASH"] as const;
  * SQL predicate: the silver row `alias` is exchanged mail. A message with no silver
  * row (LEFT JOIN) has no known label and is kept.
  */
-export const exchangedOnly = (alias: string): string =>
-  `NOT (COALESCE(${alias}.labels, '[]'::jsonb) ?| ARRAY[${NOT_EXCHANGED_LABELS.map((l) => `'${l}'`).join(", ")}]::text[])`;
+const excludingLabels = (alias: string, labels: readonly string[]): string =>
+  `NOT (COALESCE(${alias}.labels, '[]'::jsonb) ?| ARRAY[${labels.map((l) => `'${l}'`).join(", ")}]::text[])`;
+
+export const exchangedOnly = (alias: string): string => excludingLabels(alias, NOT_EXCHANGED_LABELS);
+
+// PF-CLOUDFLARE-1120: a prospect reply forwarded (Cloudflare Email Routing) into the
+// staff Gmail can be filed in SPAM by Gmail; it is still a reply. A caller that
+// recovers such forwards asks `includeSpam` and gets SPAM rows too. A draft was never
+// sent and trash was thrown away: neither is ever served.
+export const NEVER_SERVED_LABELS = ["DRAFT", "TRASH"] as const;
+
+/** SQL predicate: `exchangedOnly` that keeps rows Gmail labelled SPAM. */
+export const exchangedOrSpam = (alias: string): string => excludingLabels(alias, NEVER_SERVED_LABELS);
