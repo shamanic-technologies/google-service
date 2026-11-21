@@ -6,6 +6,7 @@ import { startAutoSync, startCalendarSync, startGmailFreshSync, startSearchConso
 import { startSpendSync } from "./services/spend-cron";
 import { startThreadReplyOutcomes } from "./services/thread-reply-outcomes";
 import { resumePendingPurges } from "./services/account-purge";
+import { ensurePhraseSearchIndex } from "./services/search-index";
 
 const main = async () => {
   await runMigrations();
@@ -25,6 +26,10 @@ const main = async () => {
   // Mailboxes disconnected before a restart finish deleting their mirror.
   resumePendingPurges().catch((err) =>
     console.error("[google-service] resuming disconnected mailbox purges failed:", err)
+  );
+  // Trigram index for the phrase search; the search answers without it (slower).
+  ensurePhraseSearchIndex().catch((err) =>
+    console.error("[google-service] phrase search index build failed:", err)
   );
   startAutoSync();
   // Gmail-only deltas every ~15 min so the mirror sees an answer we just sent.
