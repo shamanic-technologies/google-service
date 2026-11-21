@@ -804,6 +804,57 @@ export const OrgAddressedMessagesNotConnectedSchema = z.object({
   reason: z.literal("no_google_account_connected"),
 });
 
+// ─── An org's own Gmail, searched by the words of the mail ───
+// (POST /orgs/google/messages/search, BRAND-PROOF-LOGOS-1121)
+
+export const GoogleMessageSearchBodySchema = z.object({
+  phrases: z
+    .array(z.string().trim().min(3).max(200))
+    .min(1)
+    .max(50)
+    .describe("Plain phrases (case-insensitive substrings, no pattern language). A message matches when its subject or Gmail snippet contains at least one."),
+  since: z.string().datetime({ offset: true }).optional().describe("Inclusive lower bound on sentAt."),
+  until: z.string().datetime({ offset: true }).optional().describe("Exclusive upper bound on sentAt."),
+  limit: z.number().int().min(1).max(200).optional().describe("Page size, default 50."),
+  cursor: z.string().min(1).optional().describe("nextCursor of the previous page, with the same body."),
+  includeSpam: z
+    .boolean()
+    .optional()
+    .describe("true = also search messages Gmail filed in SPAM; drafts and trash never. Default false (DRAFT, SPAM, TRASH excluded)."),
+});
+
+export const GoogleMessageLinkSchema = z.object({
+  url: z.string().describe("http(s) URL, verbatim (tracking redirects included)."),
+  text: z.string().nullable().describe("Visible anchor text (or the alt of the image it wraps); null for a bare URL in the plain-text part."),
+});
+
+export const GoogleMessageSearchHitSchema = z.object({
+  id: z.string(),
+  mailbox: z.string(),
+  gmailMessageId: z.string(),
+  threadId: z.string().nullable(),
+  fromEmail: z.string().nullable(),
+  fromName: z.string().nullable(),
+  to: z.array(z.string()),
+  cc: z.array(z.string()),
+  subject: z.string().nullable(),
+  snippet: z.string().nullable(),
+  sentAt: z.string().nullable(),
+  labels: z.array(z.string()),
+  matchedPhrases: z.array(z.string()),
+  bodyText: z.string().nullable(),
+  bodyTruncated: z.boolean(),
+  bodyStatus: GoogleConversationBodyStatusEnum,
+  links: z.array(GoogleMessageLinkSchema),
+});
+
+export const GoogleMessageSearchResponseSchema = z.object({
+  mailboxes: z.array(z.string()),
+  reason: z.literal("no_google_account_connected").nullable(),
+  messages: z.array(GoogleMessageSearchHitSchema),
+  nextCursor: z.string().nullable(),
+});
+
 // ─── Reply in the person's latest Gmail thread (RIGHT-MOMENT-OR-LATER-1014) ───
 
 export const GoogleLatestThreadQuerySchema = z.object({

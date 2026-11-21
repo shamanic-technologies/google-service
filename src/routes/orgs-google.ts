@@ -15,6 +15,7 @@ import {
   GoogleSyncJobIdParamSchema,
   GoogleAccountEmailParamSchema,
   OrgAddressedMessagesBodySchema,
+  GoogleMessageSearchBodySchema,
   GoogleLatestThreadQuerySchema,
   GoogleThreadReplyBodySchema,
 } from "../schemas";
@@ -48,6 +49,7 @@ import { getConversation } from "../services/conversation";
 import { ensureFreshGmailMirror, FreshMirrorError } from "../services/fresh-mirror";
 import { listCorrespondents } from "../services/correspondents";
 import { AddressedMessagesInputError } from "../services/addressed-messages";
+import { searchOrgMessages, PhraseSearchInputError, type PhraseSearchInput } from "../services/phrase-search";
 import {
   getOrgAddressedMessages,
   type OrgAddressedMessagesInput,
@@ -909,6 +911,30 @@ router.post(
       res.json(result.page);
     } catch (err) {
       if (err instanceof AddressedMessagesInputError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ─── POST /orgs/google/messages/search ───
+//
+// This org's connected Gmail mirror searched by the words of the mail (subject +
+// Gmail snippet contain one of the phrases), newest first, with readable body
+// and links (BRAND-PROOF-LOGOS-1121). Org-scoped in the SQL; never calls Google.
+//   400 — no phrase / > 50 / bad cursor
+//   200 {mailboxes, reason, messages, nextCursor}; reason=no_google_account_connected
+//       with no messages when this org connected no mailbox
+router.post(
+  "/messages/search",
+  validateBody(GoogleMessageSearchBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await searchOrgMessages(req.orgId!, req.validatedBody as PhraseSearchInput));
+    } catch (err) {
+      if (err instanceof PhraseSearchInputError) {
         res.status(400).json({ error: err.message });
         return;
       }
