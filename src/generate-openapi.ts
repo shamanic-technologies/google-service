@@ -372,6 +372,10 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       OrgAddressedMessagesRequest: toSchema(schemas.OrgAddressedMessagesBodySchema),
       OrgAddressedMessagesResponse: toSchema(schemas.OrgAddressedMessagesResponseSchema),
       OrgAddressedMessagesNotConnected: toSchema(schemas.OrgAddressedMessagesNotConnectedSchema),
+      GoogleMessageSearchRequest: toSchema(schemas.GoogleMessageSearchBodySchema),
+      GoogleMessageLink: toSchema(schemas.GoogleMessageLinkSchema),
+      GoogleMessageSearchHit: toSchema(schemas.GoogleMessageSearchHitSchema),
+      GoogleMessageSearchResponse: toSchema(schemas.GoogleMessageSearchResponseSchema),
       GoogleLatestThreadResponse: toSchema(schemas.GoogleLatestThreadResponseSchema),
       GoogleLatestThreadNotFound: toSchema(schemas.GoogleLatestThreadNotFoundSchema),
       GoogleThreadReplyRequest: toSchema(schemas.GoogleThreadReplyBodySchema),
@@ -1460,6 +1464,32 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
             description: "This org has connected no Google account",
             content: { "application/json": { schema: { $ref: "#/components/schemas/OrgAddressedMessagesNotConnected" } } },
           },
+        },
+      },
+    },
+    "/orgs/google/messages/search": {
+      post: {
+        summary: "Search this org's connected Gmail by the words of the mail",
+        description:
+          "Org-scoped (the org from x-org-id; only this org's own connected Google mailboxes). Returns mirrored messages whose subject or Gmail snippet (the opening ~200 characters of the body) contains at least one of the given phrases, case-insensitive plain substring (no pattern language), newest first by sentAt (undated messages last). Drafts and trash are never served; spam only with includeSpam=true. Each message carries id, mailbox, gmailMessageId, threadId, fromEmail, fromName, to, cc, subject, snippet, sentAt, labels, matchedPhrases (which given phrases its subject/snippet contains), bodyText (readable text from the stored payload, text/plain preferred else HTML reduced to text, at most 20,000 characters, bodyTruncated says when cut), bodyStatus, and links (every http(s) link: anchors of the HTML part with their visible text, then bare URLs of the plain-text part with text null). Paging: send back nextCursor with the same body until it is null. since inclusive, until exclusive, both on sentAt. A read of the mirror: never calls Google, no LLM, no spend. An org with no connected mailbox answers 200 with reason=no_google_account_connected and no messages.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleMessageSearchRequest" } } },
+        },
+        responses: {
+          "200": {
+            description: "One page of matching messages, newest first; nextCursor null on the last page; reason set (and messages empty) when the org connected no mailbox",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleMessageSearchResponse" } } },
+          },
+          "400": { description: "Invalid body (no phrase, more than 50, a phrase under 3 characters, bad cursor)" },
         },
       },
     },
