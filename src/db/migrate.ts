@@ -114,6 +114,13 @@ ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS disconnected_at TIMESTA
 ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS disconnect_error TEXT;
 ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS purge_error TEXT;
 
+-- The mailbox's verified Gmail send-as addresses (DISTRY-START-DOOR-1125),
+-- refreshed from Gmail settings/sendAs at every Gmail sync (full + 15-min fresh
+-- pass + fresh read). An alias the owner added but never sent from is an owner
+-- address from its first sync on: a person's mail to it is answerable from it.
+-- NULL = not read yet (owner addresses then rest on the account email + SENT senders).
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS gmail_send_as_emails TEXT[];
+
 CREATE TABLE IF NOT EXISTS gmail_messages_raw (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id TEXT NOT NULL,

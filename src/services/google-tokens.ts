@@ -149,6 +149,18 @@ export const upsertGoogleToken = async (params: {
   return rowToToken(result.rows[0]);
 };
 
+// The mailbox's verified send-as addresses (primary + accepted aliases),
+// lower-cased, as Gmail lists them now (DISTRY-START-DOOR-1125).
+export const setGmailSendAs = async (orgId: string, id: string, addresses: string[]): Promise<void> => {
+  await query(
+    `UPDATE google_oauth_tokens
+       SET gmail_send_as_emails = $3::text[], updated_at = NOW()
+     WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL
+       AND gmail_send_as_emails IS DISTINCT FROM $3::text[]`,
+    [orgId, id, addresses]
+  );
+};
+
 export const setGmailUnavailable = async (
   orgId: string,
   id: string,

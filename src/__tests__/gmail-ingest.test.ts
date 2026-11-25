@@ -9,6 +9,8 @@ const {
   mockCreateAccessTokenProvider,
   mockUpdateGmailHistoryId,
   mockSetGmailUnavailable,
+  mockListGmailSendAs,
+  mockSetGmailSendAs,
   mockProviderGet,
   mockProviderForceRefresh,
 } = vi.hoisted(() => ({
@@ -20,6 +22,8 @@ const {
   mockCreateAccessTokenProvider: vi.fn(),
   mockUpdateGmailHistoryId: vi.fn(),
   mockSetGmailUnavailable: vi.fn(),
+  mockListGmailSendAs: vi.fn(),
+  mockSetGmailSendAs: vi.fn(),
   mockProviderGet: vi.fn(),
   mockProviderForceRefresh: vi.fn(),
 }));
@@ -45,6 +49,7 @@ vi.mock("../services/google-api", async () => {
     listGmailMessages: (...args: unknown[]) => mockListGmailMessages(...args),
     getGmailMessage: (...args: unknown[]) => mockGetGmailMessage(...args),
     listGmailHistory: (...args: unknown[]) => mockListGmailHistory(...args),
+    listGmailSendAs: (...args: unknown[]) => mockListGmailSendAs(...args),
   };
 });
 
@@ -55,6 +60,7 @@ vi.mock("../services/google-tokens", async () => {
     createAccessTokenProvider: (...args: unknown[]) => mockCreateAccessTokenProvider(...args),
     updateGmailHistoryId: (...args: unknown[]) => mockUpdateGmailHistoryId(...args),
     setGmailUnavailable: (...args: unknown[]) => mockSetGmailUnavailable(...args),
+    setGmailSendAs: (...args: unknown[]) => mockSetGmailSendAs(...args),
   };
 });
 
@@ -121,6 +127,8 @@ beforeEach(() => {
   });
   mockUpdateGmailHistoryId.mockResolvedValue(undefined);
   mockGetGmailProfile.mockResolvedValue({ historyId: "999" });
+  mockListGmailSendAs.mockResolvedValue([{ sendAsEmail: "alice@example.com", isPrimary: true }]);
+  mockSetGmailSendAs.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -237,5 +245,28 @@ describe("ingestGmailForAccount — mailbox with no Gmail", () => {
       ingestGmailForAccount(makeAccount(), caller, TEST_RUN_ID, undefined, undefined)
     ).rejects.toThrow("500");
     expect(mockSetGmailUnavailable).not.toHaveBeenCalled();
+  });
+});
+
+describe("ingestGmailForAccount — send-as addresses (DISTRY-START-DOOR-1125)", () => {
+  it("stores the mailbox's verified send-as addresses, an alias never sent from included", async () => {
+    routeQuery([]);
+    mockListGmailMessages.mockResolvedValueOnce({ messages: [] });
+    mockListGmailSendAs.mockResolvedValueOnce([
+      { sendAsEmail: "Alice@Example.com", isPrimary: true },
+      { sendAsEmail: "assistant@ourbrand.test", verificationStatus: "accepted" },
+      { sendAsEmail: "pending@ourbrand.test", verificationStatus: "pending" },
+    ]);
+
+    await ingestGmailForAccount(makeAccount(), caller, TEST_RUN_ID, undefined, undefined);
+
+    expect(mockSetGmailSendAs).toHaveBeenCalledWith(TEST_ORG_ID, TEST_ACCOUNT_ID, [
+      "alice@example.com",
+      "assistant@ourbrand.test",
+    ]);
+    // Read after the history id is persisted: a failure here never re-runs the delta.
+    expect(mockUpdateGmailHistoryId.mock.invocationCallOrder[0]).toBeLessThan(
+      mockListGmailSendAs.mock.invocationCallOrder[0]
+    );
   });
 });

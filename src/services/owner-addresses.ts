@@ -3,7 +3,9 @@ import { query } from "../db/client";
 // Which addresses are "us" for an org's mailbox — the ONE definition every read
 // that labels a message ours vs theirs uses (correspondents, conversation).
 //
-// Owner addresses = every connected Google account email of the org, plus every
+// Owner addresses = every connected Google account email of the org, its verified
+// Gmail send-as addresses (stored at each sync, so an alias added but never sent
+// from counts, DISTRY-START-DOOR-1125), plus every
 // sender of a message Gmail labelled SENT in this org's mirror (send-as aliases
 // such as a work address relayed through the personal mailbox). Gmail puts SENT
 // only on mail that left this mailbox, so it is the mailbox's own statement of
@@ -18,7 +20,8 @@ export type OwnerAddressesResult =
 
 export const resolveOwnerAddresses = async (orgId: string): Promise<OwnerAddressesResult> => {
   const accounts = await query(
-    `SELECT lower(google_account_email) AS email FROM google_oauth_tokens WHERE org_id = $1 AND disconnected_at IS NULL`,
+    `SELECT lower(google_account_email) AS email, gmail_send_as_emails AS send_as
+       FROM google_oauth_tokens WHERE org_id = $1 AND disconnected_at IS NULL`,
     [orgId]
   );
   if (accounts.rows.length === 0) return { connected: false };
@@ -32,9 +35,14 @@ export const resolveOwnerAddresses = async (orgId: string): Promise<OwnerAddress
   );
 
   const owner = new Set<string>();
-  for (const r of [...accounts.rows, ...aliases.rows]) {
-    const e = ((r.email as string | null) ?? "").trim();
+  const add = (raw: string | null | undefined) => {
+    const e = (raw ?? "").trim().toLowerCase();
     if (e.length > 0) owner.add(e);
+  };
+  for (const r of accounts.rows) {
+    add(r.email as string | null);
+    for (const s of (r.send_as as string[] | null) ?? []) add(s);
   }
+  for (const r of aliases.rows) add(r.email as string | null);
   return { connected: true, addresses: [...owner].sort() };
 };
