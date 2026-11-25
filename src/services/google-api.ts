@@ -207,6 +207,19 @@ export const listGmailSendAs = async (accessToken: string): Promise<GmailSendAs[
   return res.sendAs ?? [];
 };
 
+// The addresses Gmail lets this mailbox send as right now: the primary, plus
+// aliases whose verification Gmail accepted (an alias with no verification
+// status needs none, e.g. same-domain Workspace aliases).
+export const verifiedSendAsEmails = (sendAs: GmailSendAs[]): string[] =>
+  [
+    ...new Set(
+      sendAs
+        .filter((s) => s.isPrimary === true || s.verificationStatus === undefined || s.verificationStatus === "accepted")
+        .map((s) => (s.sendAsEmail ?? "").trim().toLowerCase())
+        .filter((e) => e.length > 0)
+    ),
+  ].sort();
+
 // Google's answer to a call the grant has no scope for.
 export const isInsufficientScopeError = (err: unknown): boolean =>
   err instanceof GoogleApiError &&

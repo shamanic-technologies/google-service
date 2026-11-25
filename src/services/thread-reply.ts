@@ -7,6 +7,7 @@ import {
   isInsufficientScopeError,
   listGmailSendAs,
   sendGmailMessage,
+  verifiedSendAsEmails,
   withTokenRetry,
   type GmailMessage,
 } from "./google-api";
@@ -29,8 +30,10 @@ import type { CallerContext } from "./key-service";
 //   the threading headers (In-Reply-To / References, `Re:` subject), then
 //   records the sent message in the mirror like any ingested one.
 //
-// "Ours" for a thread is decided per MAILBOX: the account email plus every
-// sender of a SENT-labelled message of that same account (its send-as aliases).
+// "Ours" for a thread is decided per MAILBOX: the account email, its verified
+// Gmail send-as addresses (stored at sync: an alias never sent from answers
+// mail written to it, DISTRY-START-DOOR-1125), and every sender of a
+// SENT-labelled message of that same account.
 // A thread where no owner address of its mailbox took part (a message forwarded
 // in from another mailbox) has nobody to answer from and is skipped.
 
@@ -74,26 +77,35 @@ interface AccountRow {
   id: string;
   email: string;
   scopes: string;
+  /** Verified Gmail send-as addresses stored at the last sync (lower-cased). */
+  sendAs: string[];
 }
 
 const lc = (v: string | null | undefined): string => (v ?? "").trim().toLowerCase();
 
 const loadAccounts = async (orgId: string): Promise<AccountRow[]> => {
   const res = await query(
-    `SELECT id, lower(google_account_email) AS email, scopes
+    `SELECT id, lower(google_account_email) AS email, scopes, gmail_send_as_emails AS send_as
        FROM google_oauth_tokens WHERE org_id = $1 AND disconnected_at IS NULL ORDER BY created_at ASC`,
     [orgId]
   );
-  return res.rows.map((r) => ({ id: r.id as string, email: r.email as string, scopes: (r.scopes as string) ?? "" }));
+  return res.rows.map((r) => ({
+    id: r.id as string,
+    email: r.email as string,
+    scopes: (r.scopes as string) ?? "",
+    sendAs: ((r.send_as as string[] | null) ?? []).map(lc).filter((e) => e.length > 0),
+  }));
 };
 
-// Per-mailbox owner addresses: the account email + senders of its SENT mail.
+// Per-mailbox owner addresses: the account email + its verified Gmail send-as
+// addresses (stored at sync, so an alias never sent from counts) + senders of
+// its SENT mail.
 const loadOwnerAddressesByAccount = async (
   orgId: string,
   accounts: AccountRow[]
 ): Promise<Map<string, Set<string>>> => {
   const byAccount = new Map<string, Set<string>>();
-  for (const a of accounts) byAccount.set(a.id, new Set([a.email]));
+  for (const a of accounts) byAccount.set(a.id, new Set([a.email, ...a.sendAs]));
   const aliases = await query(
     `SELECT DISTINCT google_account_id, lower(from_email) AS email
        FROM gmail_messages_silver
@@ -378,10 +390,7 @@ export const replyInThread = async (
   // The address must still be one Gmail lets this mailbox send as: otherwise
   // Gmail would silently rewrite From to the primary address.
   const sendAs = await withTokenRetry(provider, (t) => listGmailSendAs(t));
-  const allowed = sendAs.filter(
-    (s) => s.isPrimary === true || s.verificationStatus === undefined || s.verificationStatus === "accepted"
-  );
-  if (!allowed.some((s) => lc(s.sendAsEmail) === thread.fromAddress)) {
+  if (!verifiedSendAsEmails(sendAs).includes(thread.fromAddress)) {
     throw new ReplyRefusal(
       422,
       "from_address_not_send_as",

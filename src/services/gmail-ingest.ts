@@ -8,10 +8,13 @@ import {
   isMailServiceNotEnabledError,
   listGmailHistory,
   listGmailMessages,
+  listGmailSendAs,
+  verifiedSendAsEmails,
   withTokenRetry,
 } from "./google-api";
 import {
   createAccessTokenProvider,
+  setGmailSendAs,
   setGmailUnavailable,
   updateGmailHistoryId,
   type AccessTokenProvider,
@@ -129,6 +132,13 @@ export const ingestGmailForAccount = async (
   // during a long backfill is still covered by the next delta (idempotent
   // re-fetch at worst). Only reached when the loop completes without throwing.
   await updateGmailHistoryId(account.orgId, account.id, latestHistoryId);
+
+  // DISTRY-START-DOOR-1125: the mailbox's verified send-as addresses, so an
+  // alias added in Gmail and never sent from is an owner address (a person's
+  // mail to it is answerable from it). One settings read per sync (1 quota
+  // unit); after the historyId so a failure here never re-runs the delta.
+  const sendAs = await withTokenRetry(provider, (t) => listGmailSendAs(t));
+  await setGmailSendAs(account.orgId, account.id, verifiedSendAsEmails(sendAs));
   return result;
 };
 
