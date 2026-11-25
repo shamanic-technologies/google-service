@@ -158,6 +158,48 @@ describe("findLatestThread", () => {
   });
 });
 
+describe("a verified send-as alias never used in SENT mail (DISTRY-START-DOOR-1125)", () => {
+  const FRESH_ALIAS = "assistant@ourbrand.test";
+  // accounts (with the send-as list stored at sync), thread, SENT senders (alias absent).
+  const mirrorWithStoredSendAs = (scopes: string) =>
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: ACC, email: MAILBOX, scopes, send_as: [MAILBOX, FRESH_ALIAS] }] })
+      .mockResolvedValueOnce({ rows: [msg({ to_emails: [FRESH_ALIAS] })] })
+      .mockResolvedValueOnce({ rows: [{ google_account_id: ACC, email: ALIAS }] });
+
+  it("the lookup answers a person who wrote to it, from it", async () => {
+    mirrorWithStoredSendAs(`${READ} ${SEND}`);
+    const res = await findLatestThread(ORG, PERSON);
+    expect(res.found && res.thread.fromAddress).toBe(FRESH_ALIAS);
+    expect(res.found && res.thread.lastMessageDirection).toBe("inbound");
+    expect(mockQuery.mock.calls[0][0]).toContain("gmail_send_as_emails");
+  });
+
+  it("without the stored send-as list nobody could answer (the gap)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: ACC, email: MAILBOX, scopes: READ, send_as: null }] })
+      .mockResolvedValueOnce({ rows: [msg({ to_emails: [FRESH_ALIAS] })] })
+      .mockResolvedValueOnce({ rows: [{ google_account_id: ACC, email: ALIAS }] });
+    expect(await findLatestThread(ORG, PERSON)).toEqual({ found: false, reason: "no_messages" });
+  });
+
+  it("the reply leaves From the alias, in the person's thread", async () => {
+    mirrorWithStoredSendAs(`${READ} ${SEND}`);
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ payload: { payload: { headers: [{ name: "Message-ID", value: "<p1@clientco.test>" }] } } }],
+    });
+    mockSendAs.mockResolvedValueOnce([
+      { sendAsEmail: MAILBOX, isPrimary: true },
+      { sendAsEmail: FRESH_ALIAS, verificationStatus: "accepted" },
+    ]);
+    const res = await replyInThread(ORG, { to: PERSON, threadId: "T1", bodyHtml: "<p>Hi</p>" }, caller);
+    expect(res).toMatchObject({ sent: true, from: FRESH_ALIAS, threadId: "T1", inReplyTo: "<p1@clientco.test>" });
+    const [, sendArgs] = mockSend.mock.calls[0] as [string, { raw: string; threadId: string }];
+    expect(sendArgs.threadId).toBe("T1");
+    expect(Buffer.from(sendArgs.raw, "base64url").toString("utf-8")).toContain(`From: ${FRESH_ALIAS}`);
+  });
+});
+
 describe("replyInThread", () => {
   const input = { to: PERSON, threadId: "T1", bodyHtml: "<p>Hello again</p>" };
 
