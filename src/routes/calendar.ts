@@ -1,3 +1,4 @@
+import { decryptToken } from "../lib/token-crypto";
 import { Router, Request, Response, NextFunction } from "express";
 import { query } from "../db/client";
 import { validateParams, validateQuery } from "../middleware/validate";
@@ -62,10 +63,12 @@ router.delete(
         [row.google_account_email]
       );
 
+      // Decrypted outside the revoke try: an unreadable stored token is our fault, never "Google refused".
+      const refreshToken = decryptToken(row.refresh_token);
       let grant: RevokeOutcome | "kept_for_mailbox" = "kept_for_mailbox";
       if (mailbox.rows.length === 0) {
         try {
-          grant = await revokeGoogleToken(row.refresh_token);
+          grant = await revokeGoogleToken(refreshToken);
         } catch (err) {
           const message = (err as Error)?.message ?? String(err);
           console.error(`[google-service] calendar disconnect FAILED org=${orgId} account=${row.id}: ${message}`);

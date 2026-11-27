@@ -7,9 +7,17 @@ import { startSpendSync } from "./services/spend-cron";
 import { startThreadReplyOutcomes } from "./services/thread-reply-outcomes";
 import { resumePendingPurges } from "./services/account-purge";
 import { ensurePhraseSearchIndex } from "./services/search-index";
+import { assertEncryptionKey } from "./lib/token-crypto";
+import { encryptStoredTokens } from "./services/encrypt-tokens-at-rest";
 
 const main = async () => {
+  // Google OAuth tokens are encrypted at rest (GOOGLE-TOKENS-AT-REST-1127): no
+  // key = no deploy, never a service that 500s on every sync.
+  assertEncryptionKey();
   await runMigrations();
+  // Rows written before encryption-at-write are encrypted in place (tiny N).
+  const atRest = await encryptStoredTokens();
+  console.log("[google-service] tokens encrypted at rest:", JSON.stringify(atRest.encrypted));
 
   const app = createApp();
 
