@@ -20,6 +20,14 @@ See global CLAUDE.md for shared stack details (TypeScript strict, Zod, Vitest+Su
 
 **Package manager: npm.** Lockfile is `package-lock.json`; the Dockerfile runs `npm ci`. Use `npm install` / `npm test` / `npm run build` locally. Do NOT run `pnpm install` here — it creates a stray `pnpm-lock.yaml` that diverges from the lockfile the Docker build actually reads.
 
+## Google OAuth tokens are encrypted at rest (GOOGLE-TOKENS-AT-REST-1127)
+
+On 2026-11-20/21 an attacker read every table of every service DB through a staff table browser; our tokens sat in clear (live Gmail read + send on a client mailbox). Since then every `refresh_token` / `access_token` of `google_oauth_tokens`, `google_calendar_accounts`, `google_search_console_accounts` is AES-256-GCM ciphertext `enc:v1:<iv>:<tag>:<ct>` (`src/lib/token-crypto.ts`, same cipher as meta/social-service), key `GOOGLE_SERVICE_ENCRYPTION_KEY` (64 hex) ONLY in `/root/distribute/env/google-service.env`, never in the DB.
+- Encrypt at every WRITE (`encryptToken`), decrypt in each table's `rowToAccount`/`rowToToken` and right before a revoke. `decryptToken` REFUSES a plaintext value (never returns it as-is). A new token column or a new raw `SELECT refresh_token` must go through these.
+- Boot: `assertEncryptionKey()` before migrations (no key = exit 1, deploy rolls back), then `encryptStoredTokens()` (`src/services/encrypt-tokens-at-rest.ts`) encrypts in place any row still in clear, before listen (N = connected accounts, compare-and-set, idempotent). Disconnected mailboxes hold `''` (wiped): skipped.
+- Losing the key = every stored token unreadable = each account reconnects (no data loss: the mirror is ours). Rotating it = decrypt+re-encrypt pass, not built.
+- Prod check (prints no value): `SELECT count(*) FILTER (WHERE refresh_token NOT LIKE 'enc:v1:%' AND refresh_token <> '') , count(*) FILTER (WHERE access_token NOT LIKE 'enc:v1:%') FROM <table>` = 0, 0 on each of the three tables.
+
 ## OAuth client credentials
 
 The Google OAuth client (Client ID + Secret) is the **same** for the Google Ads Developer Console and the Gmail/People consent flow — one Google Cloud project, one OAuth client. It is registered as platform keys `google-client-id` / `google-client-secret` by the dashboard (`apps/dashboard/src/instrumentation.ts`), not by this service.

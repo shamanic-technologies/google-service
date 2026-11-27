@@ -1,6 +1,7 @@
 import { query } from "../db/client";
 import { getGoogleOAuthClient, type CallerContext } from "./key-service";
 import { refreshAccessToken } from "./google-oauth";
+import { decryptNullableToken, decryptToken, encryptToken } from "../lib/token-crypto";
 
 export interface GoogleAccountToken {
   id: string;
@@ -75,8 +76,8 @@ const rowToToken = (row: Record<string, unknown>): GoogleAccountToken => ({
   orgId: row.org_id as string,
   userId: row.user_id as string,
   googleAccountEmail: row.google_account_email as string,
-  refreshToken: row.refresh_token as string,
-  accessToken: (row.access_token as string | null) ?? null,
+  refreshToken: decryptToken(row.refresh_token as string),
+  accessToken: decryptNullableToken((row.access_token as string | null) ?? null),
   accessTokenExpiresAt: (row.access_token_expires_at as Date | null) ?? null,
   scopes: row.scopes as string,
   gmailHistoryId: row.gmail_history_id == null ? null : String(row.gmail_history_id),
@@ -138,8 +139,8 @@ export const upsertGoogleToken = async (params: {
       params.orgId,
       params.userId,
       params.googleAccountEmail,
-      params.refreshToken,
-      params.accessToken,
+      encryptToken(params.refreshToken),
+      encryptToken(params.accessToken),
       params.accessTokenExpiresAt,
       params.scopes,
       params.featureSlug ?? null,
@@ -250,7 +251,7 @@ export const updateAccessToken = async (
     `UPDATE google_oauth_tokens
        SET access_token = $3, access_token_expires_at = $4, updated_at = NOW()
        WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
-    [orgId, id, accessToken, expiresAt]
+    [orgId, id, encryptToken(accessToken), expiresAt]
   );
 };
 
