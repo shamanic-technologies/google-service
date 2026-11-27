@@ -17,6 +17,7 @@
 // trailing days, and a day whose figures moved voids its old run and declares
 // on a new one, so the ledger always equals Google's latest answer. A day Google
 // does not list (not final yet) is never read as zero.
+import { decryptNullableToken, decryptToken, encryptToken } from "../lib/token-crypto";
 import { createHash } from "node:crypto";
 import { env } from "../env";
 import { query } from "../db/client";
@@ -71,8 +72,8 @@ const rowToAccount = (row: Record<string, unknown>): SearchConsoleAccount => ({
   orgId: row.org_id as string,
   userId: row.user_id as string,
   googleAccountEmail: row.google_account_email as string,
-  refreshToken: row.refresh_token as string,
-  accessToken: (row.access_token as string | null) ?? null,
+  refreshToken: decryptToken(row.refresh_token as string),
+  accessToken: decryptNullableToken((row.access_token as string | null) ?? null),
   accessTokenExpiresAt: (row.access_token_expires_at as Date | null) ?? null,
   scopes: row.scopes as string,
 });
@@ -108,8 +109,8 @@ export const upsertSearchConsoleAccount = async (params: {
       params.orgId,
       params.userId,
       params.googleAccountEmail,
-      params.refreshToken,
-      params.accessToken,
+      encryptToken(params.refreshToken),
+      encryptToken(params.accessToken),
       params.accessTokenExpiresAt,
       params.scopes,
     ]
@@ -197,7 +198,7 @@ const createTokenProvider = (account: SearchConsoleAccount, caller: CallerContex
       `UPDATE google_search_console_accounts
           SET access_token = $2, access_token_expires_at = $3, updated_at = NOW()
         WHERE id = $1`,
-      [account.id, refreshed.access_token, exp]
+      [account.id, encryptToken(refreshed.access_token), exp]
     );
     current = refreshed.access_token;
     expiresAt = exp;

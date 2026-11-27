@@ -92,6 +92,7 @@ import {
 import { upsertMessage } from "../services/gmail-ingest";
 import { upsertGoogleToken } from "../services/google-tokens";
 import { AccountDisconnectedError } from "../lib/account-disconnected";
+import { encryptToken } from "../lib/token-crypto";
 
 const app = createApp();
 
@@ -111,9 +112,9 @@ const addAccount = async (org: string, email: string, messages: number, contacts
   const res = await query(
     `INSERT INTO google_oauth_tokens
         (org_id, user_id, google_account_email, refresh_token, access_token, scopes, gmail_history_id)
-     VALUES ($1, $2, $3, 'rt-' || $3, 'at', 'https://www.googleapis.com/auth/gmail.readonly', 42)
+     VALUES ($1, $2, $3, $4, $5, 'https://www.googleapis.com/auth/gmail.readonly', 42)
      RETURNING id`,
-    [org, USER, email]
+    [org, USER, email, encryptToken(`rt-${email}`), encryptToken("at")]
   );
   const id = res.rows[0].id as string;
   const prefix = `${email}-`;

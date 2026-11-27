@@ -126,6 +126,7 @@ vi.mock("../services/google-ads", () => ({
 }));
 
 import { createApp } from "../app";
+import { encryptToken } from "../lib/token-crypto";
 
 const app = createApp();
 
@@ -1346,7 +1347,7 @@ describe("DELETE /orgs/google/accounts/:email", () => {
   const tokenRow = {
     id: TEST_ACCOUNT_UUID,
     google_account_email: "alice@example.com",
-    refresh_token: "rt-alice",
+    refresh_token: encryptToken("rt-alice"),
     disconnected_at: null,
   };
 

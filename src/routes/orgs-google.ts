@@ -1,3 +1,4 @@
+import { decryptToken } from "../lib/token-crypto";
 import { Router, Request, Response, NextFunction } from "express";
 import { exchangedOnly } from "../lib/exchanged-mail";
 import { query } from "../db/client";
@@ -375,9 +376,11 @@ router.delete(
         return;
       }
 
+      // Decrypted outside the revoke try: an unreadable stored token is our fault, never "Google refused".
+      const refreshToken = decryptToken(row.refresh_token);
       let revoke: RevokeOutcome;
       try {
-        revoke = await revokeGoogleToken(row.refresh_token);
+        revoke = await revokeGoogleToken(refreshToken);
       } catch (err) {
         const message = (err as Error)?.message ?? String(err);
         console.error(
