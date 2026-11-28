@@ -2,7 +2,8 @@ import { query } from "../db/client";
 import { env } from "../env";
 import { syncOrg } from "./sync";
 import { ingestGmailForAccount } from "./gmail-ingest";
-import { listGmailDeltaAccounts } from "./google-tokens";
+import { isDeadGrantError, listGmailDeltaAccounts, recordGmailSyncResult } from "./google-tokens";
+import { AccountDisconnectedError } from "../lib/account-disconnected";
 import { listAllCalendarAccounts, syncCalendarAccount } from "./calendar";
 import { listAllSearchConsoleAccounts, syncSearchConsoleAccount } from "./search-console";
 import type { CallerContext } from "./key-service";
@@ -63,6 +64,7 @@ export const runGmailFreshOnce = async (): Promise<void> => {
   for (const account of accounts) {
     try {
       const result = await ingestGmailForAccount(account, FRESH_CALLER, "", undefined, undefined);
+      await recordGmailSyncResult(account.orgId, account.id, null);
       if (result.inserted + result.updated > 0) {
         console.log(
           `[google-service] gmail-fresh org=${account.orgId} account=${account.id}: ` +
@@ -70,8 +72,14 @@ export const runGmailFreshOnce = async (): Promise<void> => {
         );
       }
     } catch (err) {
+      if (err instanceof AccountDisconnectedError) continue;
+      await recordGmailSyncResult(account.orgId, account.id, err).catch((e) =>
+        console.error(`[google-service] gmail-fresh could not record the failure: ${(e as Error).message}`)
+      );
       console.error(
-        `[google-service] gmail-fresh failed for org=${account.orgId} account=${account.id}: ${(err as Error).message}`
+        `[google-service] gmail-fresh failed for org=${account.orgId} account=${account.id}` +
+          `${isDeadGrantError(err) ? " (Google refused the grant: reconnect required, skipped until reconnected)" : ""}: ` +
+          (err as Error).message
       );
     }
   }

@@ -1,5 +1,5 @@
 import { AccountDisconnectedError } from "../lib/account-disconnected";
-import { listOrgGoogleAccounts } from "./google-tokens";
+import { isDeadGrantError, listOrgGoogleAccounts, recordGmailSyncResult } from "./google-tokens";
 import { ingestGmailForAccount, type GmailIngestResult } from "./gmail-ingest";
 import {
   ingestOtherPeopleForAccount,
@@ -32,6 +32,10 @@ export const syncOrg = async (
   };
 
   for (const account of accounts) {
+    // Google refused this grant: nothing can be read until the owner signs in
+    // again (GET /orgs/google/accounts says reconnect_required). The org's other
+    // mailboxes still sync.
+    if (account.reconnectRequired) continue;
     let results: [GmailIngestResult, PeopleIngestResult, PeopleIngestResult];
     try {
       results = await Promise.all([
@@ -42,12 +46,24 @@ export const syncOrg = async (
     } catch (err) {
       // Disconnected mid-sync: its mirror is being purged, the other mailboxes
       // of the org still sync.
-      if (!(err instanceof AccountDisconnectedError)) throw err;
-      console.warn(
-        `[google-service] sync skipped account ${account.id} (org=${orgId}): disconnected mid-sync`
-      );
-      continue;
+      if (err instanceof AccountDisconnectedError) {
+        console.warn(
+          `[google-service] sync skipped account ${account.id} (org=${orgId}): disconnected mid-sync`
+        );
+        continue;
+      }
+      await recordGmailSyncResult(orgId, account.id, err);
+      // A dead grant is recorded (reconnect_required) and never aborts the
+      // org's other mailboxes; any other failure still fails the sync loudly.
+      if (isDeadGrantError(err)) {
+        console.error(
+          `[google-service] sync skipped account ${account.id} (org=${orgId}): Google refused the grant, reconnect required`
+        );
+        continue;
+      }
+      throw err;
     }
+    await recordGmailSyncResult(orgId, account.id, null);
     const [gmailResult, peopleResult, otherPeopleResult] = results;
     summary.gmail.inserted += gmailResult.inserted;
     summary.gmail.updated += gmailResult.updated;

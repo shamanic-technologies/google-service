@@ -120,6 +120,12 @@ ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS purge_error TEXT;
 -- address from its first sync on: a person's mail to it is answerable from it.
 -- NULL = not read yet (owner addresses then rest on the account email + SENT senders).
 ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS gmail_send_as_emails TEXT[];
+-- GMAIL-SYNC-STALL-1128: each mailbox's last Gmail read, so a dead mirror shows
+-- (accounts status + staff connector feed) instead of failing only in the logs.
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ;
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS last_sync_error TEXT;
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS last_sync_error_at TIMESTAMPTZ;
+ALTER TABLE google_oauth_tokens ADD COLUMN IF NOT EXISTS reconnect_required BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS gmail_messages_raw (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

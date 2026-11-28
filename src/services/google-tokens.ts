@@ -16,6 +16,9 @@ export interface GoogleAccountToken {
   peopleSyncToken: string | null;
   otherContactsSyncToken: string | null;
   gmailUnavailableAt: Date | null;
+  // Google refused the grant (invalid_grant: revoked, expired, password reset).
+  // Nothing can be read until the owner signs in again (GMAIL-SYNC-STALL-1128).
+  reconnectRequired: boolean;
 }
 
 const ACCESS_TOKEN_LEEWAY_MS = 60_000;
@@ -27,7 +30,7 @@ export const listOrgGoogleAccounts = async (
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
             gmail_history_id, people_sync_token, other_contacts_sync_token,
-            gmail_unavailable_at
+            gmail_unavailable_at, reconnect_required
        FROM google_oauth_tokens
        WHERE org_id = $1 AND disconnected_at IS NULL
        ORDER BY created_at ASC`,
@@ -45,10 +48,10 @@ export const listGmailDeltaAccounts = async (): Promise<GoogleAccountToken[]> =>
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
             gmail_history_id, people_sync_token, other_contacts_sync_token,
-            gmail_unavailable_at
+            gmail_unavailable_at, reconnect_required
        FROM google_oauth_tokens
        WHERE gmail_history_id IS NOT NULL AND gmail_unavailable_at IS NULL
-         AND disconnected_at IS NULL
+         AND disconnected_at IS NULL AND reconnect_required = FALSE
        ORDER BY created_at ASC`
   );
   return result.rows.map(rowToToken);
@@ -62,7 +65,7 @@ export const getGoogleAccountById = async (
     `SELECT id, org_id, user_id, google_account_email, refresh_token,
             access_token, access_token_expires_at, scopes,
             gmail_history_id, people_sync_token, other_contacts_sync_token,
-            gmail_unavailable_at
+            gmail_unavailable_at, reconnect_required
        FROM google_oauth_tokens
        WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
     [orgId, id]
@@ -84,6 +87,7 @@ const rowToToken = (row: Record<string, unknown>): GoogleAccountToken => ({
   peopleSyncToken: (row.people_sync_token as string | null) ?? null,
   otherContactsSyncToken: (row.other_contacts_sync_token as string | null) ?? null,
   gmailUnavailableAt: (row.gmail_unavailable_at as Date | null) ?? null,
+  reconnectRequired: row.reconnect_required === true,
 });
 
 export const upsertGoogleToken = async (params: {
@@ -122,6 +126,9 @@ export const upsertGoogleToken = async (params: {
                           THEN google_oauth_tokens.created_at ELSE NOW() END,
         disconnected_at = NULL,
         disconnect_error = NULL,
+        -- A fresh grant: whatever Google refused before is over.
+        reconnect_required = FALSE,
+        last_sync_error = NULL,
         purge_error = NULL,
         refresh_token = EXCLUDED.refresh_token,
         access_token = EXCLUDED.access_token,
@@ -134,7 +141,7 @@ export const upsertGoogleToken = async (params: {
      RETURNING id, org_id, user_id, google_account_email, refresh_token,
                access_token, access_token_expires_at, scopes,
                gmail_history_id, people_sync_token, other_contacts_sync_token,
-               gmail_unavailable_at`,
+               gmail_unavailable_at, reconnect_required`,
     [
       params.orgId,
       params.userId,
@@ -148,6 +155,41 @@ export const upsertGoogleToken = async (params: {
     ]
   );
   return rowToToken(result.rows[0]);
+};
+
+// GMAIL-SYNC-STALL-1128: a refresh token Google refuses (`invalid_grant`:
+// revoked by the owner or by us, expired, password reset) never works again.
+// Only a new sign-in brings the mailbox back; retrying every 15 min is noise.
+export const isDeadGrantError = (err: unknown): boolean =>
+  err instanceof Error && err.message.startsWith("Google token refresh failed") && err.message.includes("invalid_grant");
+
+// The outcome of one Gmail read of a mailbox (fresh pass, full sync, fresh
+// read), stored so a dead mirror is visible: on GET /orgs/google/accounts
+// (status) and on the staff connector feed (Monitoring). A success clears any
+// earlier error; a dead grant marks the mailbox reconnect_required, which takes
+// it out of every scheduled read until it is reconnected.
+export const recordGmailSyncResult = async (
+  orgId: string,
+  id: string,
+  err: unknown | null
+): Promise<void> => {
+  if (err == null) {
+    await query(
+      `UPDATE google_oauth_tokens
+         SET last_synced_at = NOW(), last_sync_error = NULL, reconnect_required = FALSE
+       WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
+      [orgId, id]
+    );
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  await query(
+    `UPDATE google_oauth_tokens
+       SET last_sync_error = $3, last_sync_error_at = NOW(),
+           reconnect_required = reconnect_required OR $4::boolean
+     WHERE org_id = $1 AND id = $2 AND disconnected_at IS NULL`,
+    [orgId, id, message.slice(0, 2000), isDeadGrantError(err)]
+  );
 };
 
 // The mailbox's verified send-as addresses (primary + accepted aliases),
