@@ -290,7 +290,8 @@ router.get(
       const orgId = req.orgId!;
       const result = await query(
         `SELECT google_account_email, scopes, created_at,
-                gmail_unavailable_at, gmail_unavailable_reason, disconnect_error
+                gmail_unavailable_at, gmail_unavailable_reason, disconnect_error,
+                last_synced_at, last_sync_error, reconnect_required
            FROM google_oauth_tokens
            WHERE org_id = $1 AND disconnected_at IS NULL
            ORDER BY created_at ASC`,
@@ -301,7 +302,14 @@ router.get(
         email: row.google_account_email as string,
         // gmail_unavailable: Google says this mailbox has no Gmail, so its mirror is
         // frozen at gmailUnavailableSince until the owner reconnects or re-enables it.
-        status: row.gmail_unavailable_at ? ("gmail_unavailable" as const) : ("active" as const),
+        // reconnect_required: Google refused our grant (GMAIL-SYNC-STALL-1128), nothing
+        // is read until the owner signs in again. Any other failed read stays
+        // `active` (retried on its own) and is told by lastSyncError.
+        status: row.reconnect_required
+          ? ("reconnect_required" as const)
+          : row.gmail_unavailable_at
+            ? ("gmail_unavailable" as const)
+            : ("active" as const),
         gmailUnavailableReason: (row.gmail_unavailable_reason as string | null) ?? null,
         gmailUnavailableSince: row.gmail_unavailable_at
           ? (row.gmail_unavailable_at as Date).toISOString()
@@ -311,6 +319,8 @@ router.get(
         // Why the last disconnect attempt failed (the mailbox is still connected
         // and the owner can retry). Null when none failed.
         disconnectError: (row.disconnect_error as string | null) ?? null,
+        lastSyncedAt: row.last_synced_at ? (row.last_synced_at as Date).toISOString() : null,
+        lastSyncError: (row.last_sync_error as string | null) ?? null,
       }));
 
       res.json({ accounts });

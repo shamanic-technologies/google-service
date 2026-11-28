@@ -75,6 +75,8 @@ vi.mock("../services/google-oauth", async () => {
 vi.mock("../services/google-tokens", () => ({
   listOrgGoogleAccounts: (...args: unknown[]) => mockListOrgGoogleAccounts(...args),
   upsertGoogleToken: (...args: unknown[]) => mockUpsertGoogleToken(...args),
+  recordGmailSyncResult: vi.fn().mockResolvedValue(undefined),
+  isDeadGrantError: (err: unknown) => err instanceof Error && err.message.includes("invalid_grant"),
 }));
 
 vi.mock("../services/gmail-ingest", () => ({
@@ -748,6 +750,8 @@ describe("GET /orgs/google/accounts", () => {
       gmailUnavailableReason: null,
       gmailUnavailableSince: null,
       disconnectError: null,
+      lastSyncedAt: null,
+      lastSyncError: null,
     });
     // A mailbox Google says has no Gmail reads as such, with when it stopped.
     expect(res.body.accounts[1]).toMatchObject({

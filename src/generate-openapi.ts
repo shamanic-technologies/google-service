@@ -352,6 +352,7 @@ const spec = {
       GoogleCalendarAccountsResponse: toSchema(schemas.GoogleCalendarAccountsResponseSchema),
       GoogleCalendarDisconnectResponse: toSchema(schemas.GoogleCalendarDisconnectResponseSchema),
       CalendarEventChangesResponse: toSchema(schemas.CalendarEventChangesResponseSchema),
+      ConnectorIntakeResponse: toSchema(schemas.ConnectorIntakeResponseSchema),
       GoogleSyncSummary: toSchema(schemas.GoogleSyncSummarySchema),
       GoogleSyncStartResponse: toSchema(schemas.GoogleSyncStartResponseSchema),
       GoogleSyncJobResponse: toSchema(schemas.GoogleSyncJobResponseSchema),
@@ -920,7 +921,7 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
       get: {
         summary: "List connected Google accounts for the org",
         description:
-          "Returns the set of Google (Gmail) accounts the org has connected via OAuth. Sourced from google_oauth_tokens, scoped by x-org-id.",
+          "Returns the set of Google (Gmail) accounts the org has connected via OAuth, each with its health: status=reconnect_required when Google refuses our grant (revoked, expired, password changed: nothing is read until the owner signs in again with the same connect flow, the mirror is kept; show a Reconnect button), gmail_unavailable when the account has no Gmail, active otherwise (a failed read is retried on its own; lastSyncError says why). lastSyncedAt = the last successful Gmail read. Sourced from google_oauth_tokens, scoped by x-org-id.",
         parameters: [
           { $ref: "#/components/parameters/OrgId" },
           { $ref: "#/components/parameters/UserId" },
@@ -1380,6 +1381,29 @@ GoogleStaffConversationNotFound: toSchema(schemas.GoogleStaffConversationNotFoun
           },
           "404": { description: "No such calendar connected for this org (reason=calendar_not_found)" },
           "502": { description: "Google did not confirm the revoke (reason=google_revoke_failed). Still connected; retry." },
+        },
+      },
+    },
+    "/internal/connector-intake": {
+      get: {
+        summary: "Staff: is every Google connection still being read? (Monitoring > Connected tools)",
+        description:
+          "Internal, service-to-service, cross-org (consumer: crm-service connector intake, Monitoring > Connected tools). One entry per Google connection: Gmail mailbox (source gmail), Google Calendar (google-calendar), Search Console account (google-search-console). Each carries when it was last read successfully (lastSyncedAt), why the last read failed (lastError), syncStatus (active | reconnect_required | sync_failing | gmail_unavailable) and the verdict status: red when broken (reasons: reconnect_required = Google refused our grant, the account must sign in again; sync_error = the last read failed; sync_late = no good read for longer than rule.syncLateAfterMinutes of its source; quiet_unusual = a Gmail mailbox with no new mail for longer than its own longest gap over rule.historyDays), paused for a Google account with no Gmail, ok otherwise. A connection never read yet is not red until it is late counted from its connect (or the service's boot). byDay = the records the vendor dated on each UTC day over the last `days` (Gmail: messages by their own date; Search Console: Google search clicks; Calendar: none, empty counts). Red entries first. Top-level status red when any connection is red.",
+        parameters: [
+          { $ref: "#/components/parameters/OrgId" },
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/RunId" },
+          { $ref: "#/components/parameters/FeatureSlug" },
+          { $ref: "#/components/parameters/BrandId" },
+          { $ref: "#/components/parameters/AudienceId" },
+          { name: "days", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 90, default: 30 } },
+        ],
+        responses: {
+          "200": {
+            description: "Every Google connection with its verdict",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ConnectorIntakeResponse" } } },
+          },
+          "400": { description: "Invalid days" },
         },
       },
     },
