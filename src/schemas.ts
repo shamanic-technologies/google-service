@@ -1013,7 +1013,11 @@ export const GoogleContactsResponseSchema = z.object({
 
 export const GoogleAccountSummarySchema = z.object({
   email: z.string(),
-  status: z.enum(["active", "gmail_unavailable"]),
+  status: z
+    .enum(["active", "gmail_unavailable", "reconnect_required"])
+    .describe(
+      "active = read every ~15 min (a failed read is retried on its own, lastSyncError says why). reconnect_required = Google refused our access (revoked, expired, password changed): nothing is read until the owner signs in again with the same connect flow (show Reconnect); the mirror is kept. gmail_unavailable = this Google account has no Gmail."
+    ),
   gmailUnavailableReason: z.string().nullable(),
   gmailUnavailableSince: z.string().nullable(),
   scopes: z.array(z.string()),
@@ -1022,6 +1026,8 @@ export const GoogleAccountSummarySchema = z.object({
     .string()
     .nullable()
     .describe("Why the last disconnect attempt failed (the mailbox is still connected; retry the disconnect). Null when none failed."),
+  lastSyncedAt: z.string().nullable().describe("When the mailbox was last read from Gmail successfully. Null = not read since this was recorded."),
+  lastSyncError: z.string().nullable().describe("Why the last read failed. Null when the last read succeeded."),
 });
 
 export const GoogleAccountsListResponseSchema = z.object({
@@ -1191,4 +1197,43 @@ export const SearchConsoleDisconnectResponseSchema = z.object({
   disconnected: z.literal(true),
   email: z.string(),
   grant: z.enum(["revoked", "already_revoked", "kept_for_other_connection"]),
+});
+
+// ─── GET /internal/connector-intake (GMAIL-SYNC-STALL-1128) ───
+
+export const ConnectorIntakeQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).optional(),
+});
+
+export const ConnectorIntakeResponseSchema = z.object({
+  generatedAt: z.string(),
+  days: z.number(),
+  rule: z.object({
+    historyDays: z.number(),
+    minActiveDays: z.number(),
+    minQuietDays: z.number(),
+    syncLateAfterMinutes: z.record(z.string(), z.number()),
+  }),
+  status: z.enum(["ok", "red"]),
+  connections: z.array(
+    z.object({
+      source: z.enum(["gmail", "google-calendar", "google-search-console"]),
+      connectionId: z.string(),
+      orgId: z.string(),
+      brandId: z.string().nullable(),
+      account: z.string(),
+      syncStatus: z.enum(["active", "reconnect_required", "sync_failing", "gmail_unavailable"]),
+      lastSyncedAt: z.string().nullable(),
+      lastError: z.string().nullable(),
+      status: z.enum(["ok", "red", "paused"]),
+      reasons: z.array(
+        z.object({ code: z.enum(["reconnect_required", "sync_error", "sync_late", "quiet_unusual"]), text: z.string() })
+      ),
+      newestRecordDay: z.string().nullable(),
+      quietDays: z.number().nullable(),
+      usualLongestQuietDays: z.number().nullable(),
+      activeDaysInHistory: z.number(),
+      byDay: z.array(z.object({ day: z.string(), records: z.number() })),
+    })
+  ),
 });

@@ -1,6 +1,6 @@
 import { ingestGmailForAccount } from "./gmail-ingest";
 import { AccountDisconnectedError } from "../lib/account-disconnected";
-import { listOrgGoogleAccounts } from "./google-tokens";
+import { listOrgGoogleAccounts, recordGmailSyncResult } from "./google-tokens";
 import type { CallerContext } from "./key-service";
 
 // A read asked to be FRESH (`fresh=true`) must see mail the org's mailboxes sent
@@ -47,6 +47,12 @@ const refreshOrg = async (orgId: string, caller: CallerContext, runId: string): 
   await Promise.all(
     accounts.map(async (account) => {
       if (account.gmailUnavailableAt) return;
+      // Google refused this grant: the mirror stopped where it was and cannot
+      // be vouched for until the owner signs in again.
+      if (account.reconnectRequired) {
+        failures.push(`${account.googleAccountEmail}: Google refused our access, the mailbox must be reconnected`);
+        return;
+      }
       if (!account.gmailHistoryId) {
         notCaughtUp = true;
         failures.push(`${account.googleAccountEmail}: first sync not finished`);
@@ -54,9 +60,13 @@ const refreshOrg = async (orgId: string, caller: CallerContext, runId: string): 
       }
       try {
         await ingestGmailForAccount(account, caller, runId, undefined, undefined);
+        await recordGmailSyncResult(account.orgId, account.id, null);
       } catch (err) {
         // Disconnected while refreshing: the mailbox left, nothing to vouch for.
         if (err instanceof AccountDisconnectedError) return;
+        await recordGmailSyncResult(account.orgId, account.id, err).catch((e) =>
+          console.error(`[google-service] fresh read could not record the failure: ${(e as Error).message}`)
+        );
         failures.push(`${account.googleAccountEmail}: ${(err as Error).message}`);
       }
     })

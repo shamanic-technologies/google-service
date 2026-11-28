@@ -11,6 +11,8 @@ vi.mock("../services/gmail-ingest", () => ({
 
 vi.mock("../services/google-tokens", () => ({
   listOrgGoogleAccounts: (...args: unknown[]) => mockListOrgAccounts(...args),
+  recordGmailSyncResult: vi.fn().mockResolvedValue(undefined),
+  isDeadGrantError: (err: unknown) => err instanceof Error && err.message.includes("invalid_grant"),
 }));
 
 import {

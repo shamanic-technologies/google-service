@@ -65,6 +65,13 @@ Bronze stays the source of truth; silver is a rebuildable view. Contact silver c
   - **Cost**: per mailbox per tick = one `profile` + one `history.list` (+ one `messages.get` per new message) on the user's own OAuth token; ~300 quota units/day per mailbox (profile 1 + history.list 2, x96; +5 per new message) vs Gmail's per-user cap of 250 units per SECOND. No metered platform cost → no cost declaration.
 - Both: take a fresh pool connection per query; never add a timer whose only job is to touch the DB (no keepalives). Google People/Gmail calls use the user's own OAuth token (no metered platform cost). `src/services/sync.ts` `syncOrg` is the shared core of the async HTTP sync job and the full cron.
 
+### Mirror health: a dead mailbox is visible, never only in the log (GMAIL-SYNC-STALL-1128)
+
+2026-11-27 18:20 UTC the security response revoked all 4 Gmail grants at Google (tokens had leaked in clear). Every 15-min pass then failed with `invalid_grant` for 23 h while `/orgs/google/accounts` said `active` and nothing was red: agents read a frozen mirror as current. Now:
+- **Every Gmail read records its outcome** (`recordGmailSyncResult` in `google-tokens.ts`): fresh pass, full sync, `fresh=true` read. Success = `last_synced_at`, clears `last_sync_error`; failure = `last_sync_error(_at)`. A new read path must record too.
+- **Dead grant = `reconnect_required`** (`isDeadGrantError`: refresh answered `invalid_grant`). It never works again, so the mailbox leaves the fresh pass and the full sync (which no longer aborts the org's other mailboxes on it); a `fresh=true` read answers 502 naming the reconnect. Only a reconnect (`upsertGoogleToken`) clears it; the mirror is kept.
+- **`GET /internal/connector-intake?days=`** (`src/services/connector-health.ts`): one entry per Gmail mailbox, Calendar, Search Console account, same shape as crm-service's connector intake (Monitoring > Connected tools, its consumer). Red = `reconnect_required` / `sync_error` / `sync_late` (no good read for 4 passes: 60 min Gmail/Calendar, 25 h Search Console) / `quiet_unusual` (Gmail only: no mail for longer than its own longest gap over 90 days, ≥10 active days). Never read yet = counted from connect or boot (a deploy is never red). Gmail `byDay` = messages by their own date (silver, ~0.8 s on the 700k mirror), Search Console = clicks.
+
 ### Drafts, spam, trash are never served as exchanged mail (GMAIL-DRAFTS-AS-SENT-1022)
 
 The mirror stores every Gmail message, drafts included (a saved draft to a prospect showed as a second "Sent" line in the Unibox). Every read serving a person's mail (conversation org + staff, both addressed reads, `/orgs/google/messages?participant=`, correspondents' outbound side, the reply-thread picker) filters with `exchangedOnly()` / `NOT_EXCHANGED_LABELS` from `src/lib/exchanged-mail.ts`. A new read of that kind must too. Rows stay stored. Correspondents' INBOUND count is left unfiltered on purpose (it must stay index-only). Test: `src/__tests__/exchanged-mail.test.ts` on PGlite.
@@ -88,7 +95,7 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 |--------|------|---------|
 | `POST` | `/orgs/google/auth/start` | Build authorize URL (PKCE), persist pending state |
 | `GET` | `/orgs/google/auth/callback` | Exchange code, store tokens, then START a sync job for the org (returns `syncJobId`): a self-serve connect mirrors with no staff step. Browser callback is proxied by the dashboard server-side so identity headers are present. |
-| `GET` | `/orgs/google/accounts` | The org's connected mailboxes + health (`active` / `gmail_unavailable`). |
+| `GET` | `/orgs/google/accounts` | The org's connected mailboxes + health (`active` / `reconnect_required` / `gmail_unavailable`, `lastSyncedAt`, `lastSyncError`). See "Mirror health". |
 | `DELETE` | `/orgs/google/accounts/{email}` | Disconnect, answers in ~the Google revoke time whatever the mailbox size (GMAIL-DISCONNECT-HANGS-1014: the in-request `ON DELETE CASCADE` over ~682k messages never answered, after the grant was revoked). See "Disconnect" below. 404 `reason=account_not_found`. |
 | `POST` | `/orgs/google/sync` | Start an async sync. Inserts a `google_sync_jobs` row, fires ingest in a detached promise, returns `202 {jobId, status:"running"}` immediately. Backfill on first run (last `GOOGLE_GMAIL_BACKFILL_DAYS` for Gmail), delta thereafter (Gmail `historyId`, People `syncToken`). Fan-out per connected Google account. |
 | `GET` | `/orgs/google/sync/{jobId}` | Poll job status. Returns `{jobId, status, summary, error, startedAt, finishedAt}`. Org-scoped: 404 if `jobId` belongs to another org. |
@@ -103,6 +110,7 @@ All bronze tables (and `google_sync_jobs`, `google_contact_links`) are `org_id`-
 | `POST` | `/orgs/google/thread-replies` | Send ONE reply in that thread from that address (Gmail API). See "Reply in the person's thread". |
 | `GET` | `/orgs/google/calendar/accounts` | The org's connected Google Calendars + health. See "Google Calendar". |
 | `DELETE` | `/orgs/google/calendar/accounts/{email}` | Disconnect one calendar. See "Google Calendar". |
+| `GET` | `/internal/connector-intake` | Staff, cross-org: every Google connection (mailbox, calendar, Search Console) with its last good read, error, records per day and a red/ok/paused verdict. See "Mirror health". |
 | `GET` | `/internal/calendar/events` | Internal changes feed of calendar events (booked meetings + Meet attendance), cross-org. |
 | `GET` | `/orgs/google/search-console/accounts` | The org's connected Search Console accounts + each property's brand and status. See "Google Search Console". |
 | `GET` | `/orgs/google/search-console/clicks` | Counted « Google search click » Units per property x Google day (`brandId`/`since`/`until`). |
